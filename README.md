@@ -20,10 +20,14 @@ Project Nexus 是一個由 AI Agent 組成的自動化企業系統，包含：
 ## 特色
 
 - **2.5D 戰情室 (War Room)**：辦公室地圖，每個 Agent 以精細的 2.5D 角色呈現（含身體、頭髮、衣服、狀態指示燈、工作動畫）
-- **雙 Pipeline 管理**：Sales Pipeline（商機追蹤）+ Goal Dashboard（專案執行）
+- **多 Board 管理系統**：
+  - **Sales Board**：商機追蹤、MEDDIC 分析、Pipeline 階段管理
+  - **Project Board**：專案執行、Goal → Phase → Checkpoint
+  - **Product Board**：產品開發、P1-P6 階段、QA/UAT 追蹤
+  - **Knowledge Base**：公司知識庫、搜尋篩選、Markdown 支援
 - **Human-in-the-Loop**：關鍵決策由 CEO 審批
 - **LLM Provider 可切換**：支援 Gemini / Claude / OpenAI
-- **Tab 導覽順序**：Dashboard → Sales Pipeline → Project Goals → CEO Inbox
+- **Tab 導覽順序**：Dashboard → Sales Board → Project Board → Product Board → Knowledge Base → Inbox
 
 ## 快速開始
 
@@ -61,14 +65,18 @@ docker-compose ps
 nexus-ai-company/
 ├── backend/                 # FastAPI 後端
 │   ├── app/
-│   │   ├── agents/         # Agent 類別
-│   │   ├── llm/            # LLM 抽象層
-│   │   ├── pipelines/      # 狀態機
+│   │   ├── agents/         # Agent 類別 (GATEKEEPER, HUNTER, ORCHESTRATOR)
+│   │   ├── pipeline/       # Sales Pipeline (Opportunity, Contact, Activity)
+│   │   ├── goals/          # Project Goals (Goal, Phase, Checkpoint)
+│   │   ├── product/        # Product Board (ProductItem, QA, UAT)
+│   │   ├── knowledge/      # Knowledge Base (KnowledgeCard)
+│   │   ├── engines/        # Engine Layer (MEDDIC, NLP)
 │   │   ├── db/             # 資料庫 Models
 │   │   └── api/            # API Routes
 │   └── tests/
-├── frontend/               # React 前端
+├── frontend/               # React 前端 (Vite + TypeScript)
 │   └── src/
+│       └── components/     # UI 元件 (SalesPipeline, GoalDashboard, ProductBoard, KnowledgeBase)
 ├── docs/                   # 設計文件
 │   ├── architecture/       # 架構設計
 │   ├── decisions/          # ADR 決策紀錄

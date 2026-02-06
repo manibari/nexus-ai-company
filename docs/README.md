@@ -64,6 +64,7 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 | [009](./decisions/ADR-009-knowledge-management.md) | Knowledge Management | 已採納 | 知識管理基礎：儲存、分類、標籤、全文搜尋 |
 | [010](./decisions/ADR-010-goal-driven-execution.md) | Goal-Driven Execution | 已採納 | 目標導向執行：Goal → Phase → Checkpoint |
 | [011](./decisions/ADR-011-sales-pipeline.md) | Sales Pipeline | 已採納 | 獨立銷售管理：Opportunity + MEDDIC + Pipeline Stages |
+| [012](./decisions/ADR-012-product-board.md) | Product Board | 已採納 | 產品開發管理：P1-P6 階段 + QA/UAT 追蹤 |
 
 ### 新增 ADR 規範
 
@@ -81,7 +82,7 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend                              │
 │                      (Vite + React)                          │
-│   Tab: Dashboard → Sales Pipeline → Project Goals → Inbox    │
+│   Tab: Dashboard → Sales → Project → Product → Knowledge → Inbox │
 │   2.5D Office Map: Character sprites, rooms, animations      │
 └─────────────────────────────────────────────────────────────┘
                               │
@@ -182,8 +183,23 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | ADR-004 Hybrid | `backend/app/executor/hybrid.py` |
 | ADR-005 Observability | `backend/app/core/execution_mode.py`, `action_journal.py`, `pipeline_gate.py` |
 | ADR-006 CEO Intake | `backend/app/intake/`, `backend/app/api/intake.py` |
-| ADR-007 Engine Layer | `backend/app/engines/` (待建立) |
+| ADR-007 Engine Layer | `backend/app/engines/` |
+| ADR-010 Goal Execution | `backend/app/goals/`, `backend/app/api/goals.py` |
+| ADR-011 Sales Pipeline | `backend/app/pipeline/`, `backend/app/api/pipeline.py` |
+| Product Board | `backend/app/product/`, `backend/app/api/product.py` |
+| Knowledge Base | `backend/app/knowledge/`, `backend/app/api/knowledge.py` |
 | Agent Configs | `backend/config/agents/*.yaml` |
+
+### 前端元件對照
+
+| 元件 | 路徑 | 功能 |
+|------|------|------|
+| SalesPipeline | `frontend/src/components/SalesPipeline.tsx` | Sales Board UI |
+| GoalDashboard | `frontend/src/components/GoalDashboard.tsx` | Project Board UI |
+| ProductBoard | `frontend/src/components/ProductBoard.tsx` | Product Board UI (Kanban) |
+| KnowledgeBase | `frontend/src/components/KnowledgeBase.tsx` | Knowledge Base UI (Search + Markdown) |
+| CEOInbox | `frontend/src/components/CEOInbox.tsx` | Inbox UI |
+| OfficeMap | `frontend/src/components/OfficeMap.tsx` | 2.5D Office Map |
 
 ---
 
@@ -196,21 +212,24 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | 2024-02-06 | 0.3.0 | 新增 ADR-009 Knowledge Management（知識管理基礎）|
 | 2024-02-06 | 0.4.0 | 新增 ADR-010 Goal-Driven Execution（目標導向執行）|
 | 2024-02-06 | 0.5.0 | 新增 ADR-011 Sales Pipeline、2.5D Office Map、Tab 順序調整 |
+| 2024-02-06 | 0.6.0 | 新增 Product Board、Knowledge Base UI、Tab 更新為 6 個 |
 
 ---
 
 ## 前端 Tab 順序
 
 ```
-[📊 Dashboard] → [💰 Sales Pipeline] → [🎯 Project Goals] → [📥 CEO Inbox]
+[📊 Dashboard] → [💰 Sales Board] → [🎯 Project Board] → [🏭 Product Board] → [📚 Knowledge Base] → [📥 Inbox]
 ```
 
-| Tab | 功能 |
-|-----|------|
-| **Dashboard** | 總覽 Agent 狀態、2.5D 辦公室地圖、KPI 指標 |
-| **Sales Pipeline** | 商機追蹤、MEDDIC 分析、Pipeline 進度視覺化 |
-| **Project Goals** | 專案執行追蹤、Phase 進度、時間管理 |
-| **CEO Inbox** | 新輸入處理、決策審批、Agent 請求 |
+| Tab | 功能 | 對應元件 |
+|-----|------|----------|
+| **Dashboard** | 總覽 Agent 狀態、2.5D 辦公室地圖、KPI 指標 | `OfficeMap.tsx` |
+| **Sales Board** | 商機追蹤、MEDDIC 分析、Pipeline 進度 | `SalesPipeline.tsx` |
+| **Project Board** | 專案執行、Goal → Phase → Checkpoint | `GoalDashboard.tsx` |
+| **Product Board** | 產品開發、P1-P6 階段、QA/UAT 追蹤 | `ProductBoard.tsx` |
+| **Knowledge Base** | 知識庫、搜尋篩選、Markdown 渲染 | `KnowledgeBase.tsx` |
+| **Inbox** | 新輸入處理、決策審批、Agent 請求 | `CEOInbox.tsx` |
 
 ---
 

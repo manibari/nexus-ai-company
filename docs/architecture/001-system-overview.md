@@ -9,18 +9,17 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        FRONTEND (React)                         │
-│  Tab Order: [Dashboard] → [Sales Pipeline] → [Goals] → [Inbox]  │
+│                     FRONTEND (Vite + React)                      │
+│  Tab: [Dashboard] [Sales] [Project] [Product] [Knowledge] [Inbox]│
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │ 2.5D Office │  │  HUD/KPI    │  │  Inbox (CEO Decisions)  │  │
-│  │ (SVG+Chars) │  │  Dashboard  │  │  - Approvals            │  │
-│  └─────────────┘  └─────────────┘  │  - UAT Reviews          │  │
-│                                     └─────────────────────────┘  │
-│  Office Map Features:                                            │
-│  • 2.5D Character sprites (body, hair, clothes, animations)      │
-│  • 9 rooms: CEO Office, Reception, Sales, War Room, etc.         │
-│  • Real-time agent status indicators                             │
-│  • Clickable agents with detail panel                            │
+│  │ 2.5D Office │  │  HUD/KPI    │  │  Boards & Dashboards    │  │
+│  │ (SVG+Chars) │  │  Dashboard  │  │  - SalesPipeline.tsx    │  │
+│  └─────────────┘  └─────────────┘  │  - GoalDashboard.tsx    │  │
+│                                     │  - ProductBoard.tsx     │  │
+│  Office Map Features:               │  - KnowledgeBase.tsx    │  │
+│  • 2.5D Character sprites           │  - CEOInbox.tsx         │  │
+│  • 9 rooms with agents              └─────────────────────────┘  │
+│  • Real-time status indicators                                   │
 └────────────────────────────┬────────────────────────────────────┘
                              │ WebSocket + REST API
                              ▼
@@ -121,9 +120,13 @@ Agent 遇到權限不足
 | 模組 | 路徑 | 職責 |
 |------|------|------|
 | API Layer | `backend/app/api/` | 處理 HTTP/WebSocket 請求 |
-| Agent Classes | `backend/app/agents/` | 各 Agent 的思考邏輯 |
+| Agent Classes | `backend/app/agents/` | 各 Agent 的思考邏輯 (GATEKEEPER, HUNTER, ORCHESTRATOR) |
+| Sales Pipeline | `backend/app/pipeline/` | 商機管理 (Opportunity, Contact, Activity, MEDDIC) |
+| Project Goals | `backend/app/goals/` | 專案管理 (Goal, Phase, Checkpoint) |
+| Product Board | `backend/app/product/` | 產品開發 (ProductItem, P1-P6 Stages, QA/UAT) |
+| Knowledge Base | `backend/app/knowledge/` | 知識庫 (KnowledgeCard, Search, Tags) |
+| Engines | `backend/app/engines/` | 能力層 (MEDDIC, NLP, Enrichment) |
 | LLM Providers | `backend/app/llm/` | 抽象化 LLM 調用 |
-| Pipelines | `backend/app/pipelines/` | 狀態機轉換邏輯 |
 | Database | `backend/app/db/` | SQLAlchemy Models |
 
 ---
