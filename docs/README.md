@@ -60,7 +60,8 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 | [005](./decisions/ADR-005-agent-observability.md) | Agent Observability | 已採納 | 步驟執行、Action Journal、Pipeline Gate |
 | [006](./decisions/ADR-006-ceo-intake.md) | CEO Intake Layer | 已採納 | GATEKEEPER 處理 CEO 非結構化輸入 |
 | [007](./decisions/ADR-007-engine-layer.md) | Engine Layer | 已採納 | Agent (決策) 與 Engine (能力) 分離 |
-| [008](./decisions/ADR-008-knowledge-base.md) | Knowledge Base | 已採納 | 公司知識庫 + RAG 檢索 + 內容生成 |
+| [008](./decisions/ADR-008-knowledge-base.md) | Knowledge Base | 已採納 | Embedding + RAG 檢索 + 內容生成（增強層）|
+| [009](./decisions/ADR-009-knowledge-management.md) | Knowledge Management | 已採納 | 知識管理基礎：儲存、分類、標籤、全文搜尋 |
 
 ### 新增 ADR 規範
 
@@ -189,6 +190,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 |------|------|---------|
 | 2024-02-06 | 0.1.0 | 初始文件結構、ADR-001 ~ ADR-007、驗證場景 |
 | 2024-02-06 | 0.2.0 | 新增 ADR-008 Knowledge Base、架構圖更新 |
+| 2024-02-06 | 0.3.0 | 新增 ADR-009 Knowledge Management（知識管理基礎）|
 
 ---
 
