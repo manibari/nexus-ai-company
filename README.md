@@ -23,8 +23,10 @@ Project Nexus 是一個由 AI Agent 組成的自動化企業系統，包含：
 - **多 Board 管理系統**：
   - **Sales Board**：商機追蹤、MEDDIC 分析、Pipeline 階段管理
   - **Project Board**：專案執行、Goal → Phase → Checkpoint
-  - **Product Board**：產品開發、P1-P6 階段、QA/UAT 追蹤
+  - **Product Board**：產品開發（P1-P6 階段）+ 產品目錄（Catalog 視圖）
   - **Knowledge Base**：公司知識庫、搜尋篩選、Markdown 支援
+- **敏捷開發流程**：CEO→PM→SWE→QA 整合 Product Board 階段
+- **產品目錄系統**：統一管理已完成產品（products/ 目錄）
 - **Human-in-the-Loop**：關鍵決策由 CEO 審批
 - **LLM Provider 可切換**：支援 Gemini / Claude / OpenAI
 - **Tab 導覽順序**：Dashboard → Sales Board → Project Board → Product Board → Knowledge Base → Inbox
@@ -72,25 +74,39 @@ nexus-ai-company/
 │   │   ├── knowledge/      # Knowledge Base (KnowledgeCard)
 │   │   ├── engines/        # Engine Layer (MEDDIC, NLP)
 │   │   ├── db/             # 資料庫 Models
-│   │   └── api/            # API Routes
+│   │   └── api/            # API Routes (含 catalog.py 產品目錄)
 │   └── tests/
 ├── frontend/               # React 前端 (Vite + TypeScript)
 │   └── src/
 │       └── components/     # UI 元件 (SalesPipeline, GoalDashboard, ProductBoard, KnowledgeBase)
+├── products/               # 產品目錄（已完成產品）
+│   ├── README.md           # 產品總覽
+│   ├── stockpulse/         # StockPulse 智能股票分析平台
+│   └── nexus-dashboard/    # Nexus Dashboard 內部管理系統
 ├── docs/                   # 設計文件
 │   ├── architecture/       # 架構設計
-│   ├── decisions/          # ADR 決策紀錄
-│   └── pipelines/          # Pipeline 設計
+│   ├── decisions/          # ADR 決策紀錄 (ADR-001 ~ ADR-016)
+│   ├── protocols/          # 流程規範（敏捷開發、部署標準）
+│   ├── templates/          # 文件範本（User Story、Sprint、PRD）
+│   └── proposals/          # 提案文件（需 CEO 核准）
 └── docker-compose.yml
 ```
 
 ## 文件
 
+### 核心文件
 - [專案白皮書](docs/PROJECT-WHITEPAPER.md)
 - [系統架構](docs/architecture/001-system-overview.md)
-- [LLM 抽象層設計](docs/architecture/002-llm-abstraction.md)
-- [Agent 通訊機制](docs/architecture/003-agent-communication.md)
-- [技術選型決策](docs/decisions/ADR-001-tech-stack.md)
+- [文件索引](docs/README.md)
+
+### 產品目錄
+- [產品總覽](products/README.md)
+- [StockPulse](products/stockpulse/PRODUCT.md) - 智能股票分析平台
+- [Nexus Dashboard](products/nexus-dashboard/PRODUCT.md) - 內部管理系統
+
+### 開發流程
+- [敏捷開發流程](docs/protocols/agile_workflow.md)
+- [User Story 範本](docs/templates/user_story_template.md)
 
 ## 開發
 

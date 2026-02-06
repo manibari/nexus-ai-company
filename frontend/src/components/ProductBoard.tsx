@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react'
 
+// === Types ===
+
 interface ProductSummary {
   id: string
   title: string
@@ -39,6 +41,29 @@ interface Dashboard {
   stale_count: number
 }
 
+// Catalog types
+interface CatalogProduct {
+  id: string
+  name: string
+  description: string
+  status: 'production' | 'beta' | 'mvp' | 'development' | 'deprecated'
+  version: string
+  release_date: string | null
+  links: {
+    demo?: string
+    docs?: string
+    api?: string
+    source?: string
+  }
+  features: string[]
+  tech_stack: {
+    frontend?: string
+    backend?: string
+    database?: string
+  }
+  full_content?: string
+}
+
 interface ProductBoardProps {
   apiUrl: string
 }
@@ -67,7 +92,19 @@ const TYPE_ICONS: Record<string, string> = {
   experiment: '🧪',
 }
 
+const STATUS_CONFIG: Record<string, { icon: string; label: string; color: string }> = {
+  production: { icon: '🟢', label: 'Production', color: 'bg-green-600' },
+  beta: { icon: '🟡', label: 'Beta', color: 'bg-yellow-600' },
+  mvp: { icon: '🔵', label: 'MVP', color: 'bg-blue-600' },
+  development: { icon: '🔧', label: 'Development', color: 'bg-slate-600' },
+  deprecated: { icon: '⚪', label: 'Deprecated', color: 'bg-gray-600' },
+}
+
 export default function ProductBoard({ apiUrl }: ProductBoardProps) {
+  // View state
+  const [activeView, setActiveView] = useState<'catalog' | 'pipeline'>('catalog')
+
+  // Pipeline state
   const [products, setProducts] = useState<ProductSummary[]>([])
   const [selectedProduct, setSelectedProduct] = useState<ProductDetail | null>(null)
   const [dashboard, setDashboard] = useState<Dashboard | null>(null)
@@ -75,6 +112,11 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
   const [error, setError] = useState<string | null>(null)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+
+  // Catalog state
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([])
+  const [selectedCatalogProduct, setSelectedCatalogProduct] = useState<CatalogProduct | null>(null)
+  const [catalogLoading, setCatalogLoading] = useState(true)
 
   // Create form state
   const [newProduct, setNewProduct] = useState({
@@ -86,6 +128,32 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
     spec_doc: '',
     acceptance_criteria: '',
   })
+
+  // Fetch catalog products
+  const fetchCatalog = async () => {
+    setCatalogLoading(true)
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/catalog`)
+      if (response.ok) {
+        setCatalogProducts(await response.json())
+      }
+    } catch (err) {
+      console.error('Failed to fetch catalog:', err)
+    } finally {
+      setCatalogLoading(false)
+    }
+  }
+
+  const fetchCatalogDetail = async (id: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/catalog/${id}`)
+      if (response.ok) {
+        setSelectedCatalogProduct(await response.json())
+      }
+    } catch (err) {
+      console.error('Failed to fetch catalog detail:', err)
+    }
+  }
 
   const fetchProducts = async () => {
     try {
@@ -123,7 +191,7 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
   useEffect(() => {
     const fetchAll = async () => {
       setLoading(true)
-      await Promise.all([fetchProducts(), fetchDashboard()])
+      await Promise.all([fetchProducts(), fetchDashboard(), fetchCatalog()])
       setLoading(false)
     }
     fetchAll()
@@ -195,6 +263,10 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
     return products.filter(p => p.stage === stage)
   }
 
+  const getProductsByStatus = (status: string) => {
+    return catalogProducts.filter(p => p.status === status)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -213,23 +285,55 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
               <span>🏭</span> Product Board
             </h2>
             <p className="text-sm text-gray-400">
-              {dashboard?.total || 0} items | {dashboard?.blocked_count || 0} blocked | {dashboard?.stale_count || 0} stale
+              {catalogProducts.length} products | {dashboard?.total || 0} in pipeline
             </p>
           </div>
           <div className="flex gap-2">
             <button
-              onClick={() => { fetchProducts(); fetchDashboard() }}
+              onClick={() => { fetchProducts(); fetchDashboard(); fetchCatalog() }}
               className="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg text-sm"
             >
               🔄 Refresh
             </button>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm"
-            >
-              + New Item
-            </button>
+            {activeView === 'pipeline' && (
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm"
+              >
+                + New Item
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* View Switcher */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setActiveView('catalog')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeView === 'catalog'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            📦 Catalog
+            <span className="px-2 py-0.5 bg-black/30 rounded text-xs">
+              {catalogProducts.length}
+            </span>
+          </button>
+          <button
+            onClick={() => setActiveView('pipeline')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+              activeView === 'pipeline'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            🔄 Pipeline
+            <span className="px-2 py-0.5 bg-black/30 rounded text-xs">
+              {dashboard?.total || 0}
+            </span>
+          </button>
         </div>
 
         {error && (
@@ -239,103 +343,206 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
           </div>
         )}
 
-        {/* Kanban Board */}
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {STAGES.map(stage => {
-            const stageProducts = getProductsByStage(stage.key)
-            return (
-              <div
-                key={stage.key}
-                className="flex-shrink-0 w-56 bg-slate-900 rounded-lg"
-              >
-                {/* Column Header */}
-                <div className={`${stage.color} rounded-t-lg px-3 py-2 flex items-center justify-between`}>
-                  <span className="font-medium text-sm">
-                    {stage.icon} {stage.label}
-                  </span>
-                  <span className="bg-black/30 px-2 py-0.5 rounded text-xs">
-                    {stageProducts.length}
-                  </span>
-                </div>
-
-                {/* Cards */}
-                <div className="p-2 space-y-2 max-h-96 overflow-y-auto">
-                  {stageProducts.length === 0 ? (
-                    <div className="text-center text-gray-500 text-xs py-4">
-                      No items
-                    </div>
-                  ) : (
-                    stageProducts.map(product => (
-                      <div
-                        key={product.id}
-                        onClick={() => fetchProductDetail(product.id)}
-                        className={`bg-slate-800 rounded-lg p-3 cursor-pointer hover:bg-slate-700 transition-colors ${
-                          selectedProduct?.id === product.id ? 'ring-2 ring-cyan-500' : ''
-                        }`}
-                      >
-                        {/* Title & Type */}
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <span className="text-sm font-medium line-clamp-2">
-                            {TYPE_ICONS[product.type]} {product.title}
-                          </span>
-                        </div>
-
-                        {/* Priority & Assignee */}
-                        <div className="flex items-center justify-between text-xs">
-                          <span className={`px-1.5 py-0.5 rounded ${PRIORITY_COLORS[product.priority]}`}>
-                            {product.priority}
-                          </span>
-                          {product.assignee && (
-                            <span className="text-gray-400">{product.assignee}</span>
-                          )}
-                        </div>
-
-                        {/* Days in stage & QA status */}
-                        <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
-                          <span>{product.days_in_stage}d</span>
-                          {stage.key === 'qa_testing' && (
-                            <span className={product.qa_passed ? 'text-green-400' : 'text-yellow-400'}>
-                              {product.qa_passed ? '✓ QA Passed' : '⏳ Testing'}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
+        {/* Catalog View */}
+        {activeView === 'catalog' && (
+          <div className="space-y-6">
+            {catalogLoading ? (
+              <div className="text-center text-gray-400 py-8">Loading catalog...</div>
+            ) : catalogProducts.length === 0 ? (
+              <div className="text-center text-gray-400 py-8">
+                No products yet. Add products to the <code>products/</code> directory.
               </div>
-            )
-          })}
+            ) : (
+              Object.entries(STATUS_CONFIG).map(([status, config]) => {
+                const statusProducts = getProductsByStatus(status)
+                if (statusProducts.length === 0) return null
 
-          {/* Blocked Column */}
-          {dashboard && dashboard.blocked_count > 0 && (
-            <div className="flex-shrink-0 w-56 bg-slate-900 rounded-lg">
-              <div className="bg-red-600 rounded-t-lg px-3 py-2 flex items-center justify-between">
-                <span className="font-medium text-sm">🚫 Blocked</span>
-                <span className="bg-black/30 px-2 py-0.5 rounded text-xs">
-                  {dashboard.blocked_count}
-                </span>
-              </div>
-              <div className="p-2 space-y-2 max-h-96 overflow-y-auto">
-                {getProductsByStage('blocked').map(product => (
-                  <div
-                    key={product.id}
-                    onClick={() => fetchProductDetail(product.id)}
-                    className="bg-slate-800 rounded-lg p-3 cursor-pointer hover:bg-slate-700 border-l-2 border-red-500"
-                  >
-                    <div className="text-sm font-medium line-clamp-2">
-                      {TYPE_ICONS[product.type]} {product.title}
+                return (
+                  <div key={status} className="space-y-3">
+                    <h3 className={`inline-flex items-center gap-2 px-3 py-1 rounded-lg text-sm font-medium ${config.color}`}>
+                      {config.icon} {config.label}
+                      <span className="bg-black/30 px-2 py-0.5 rounded text-xs">
+                        {statusProducts.length}
+                      </span>
+                    </h3>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {statusProducts.map(product => (
+                        <div
+                          key={product.id}
+                          onClick={() => fetchCatalogDetail(product.id)}
+                          className="bg-slate-900 rounded-lg p-4 cursor-pointer hover:bg-slate-800 transition-colors border border-slate-700 hover:border-cyan-500"
+                        >
+                          {/* Header */}
+                          <div className="flex items-start justify-between mb-2">
+                            <h4 className="font-bold text-white">{product.name}</h4>
+                            <span className="text-xs text-gray-400">{product.version}</span>
+                          </div>
+
+                          {/* Description */}
+                          <p className="text-sm text-gray-400 mb-3 line-clamp-2">
+                            {product.description}
+                          </p>
+
+                          {/* Features */}
+                          {product.features.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mb-3">
+                              {product.features.slice(0, 3).map((f, i) => (
+                                <span key={i} className="text-xs bg-slate-700 text-gray-300 px-2 py-0.5 rounded">
+                                  {f.length > 15 ? f.substring(0, 15) + '...' : f}
+                                </span>
+                              ))}
+                              {product.features.length > 3 && (
+                                <span className="text-xs text-gray-500">+{product.features.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Links */}
+                          <div className="flex gap-2 mt-3 pt-3 border-t border-slate-700">
+                            {product.links.demo && (
+                              <a
+                                href={product.links.demo}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="text-xs bg-cyan-600 hover:bg-cyan-500 px-2 py-1 rounded"
+                              >
+                                🌐 Demo
+                              </a>
+                            )}
+                            {product.links.api && (
+                              <a
+                                href={product.links.api}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="text-xs bg-purple-600 hover:bg-purple-500 px-2 py-1 rounded"
+                              >
+                                📡 API
+                              </a>
+                            )}
+                            {product.links.source && (
+                              <a
+                                href={product.links.source}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={e => e.stopPropagation()}
+                                className="text-xs bg-slate-600 hover:bg-slate-500 px-2 py-1 rounded"
+                              >
+                                💻 Code
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )
+              })
+            )}
+          </div>
+        )}
+
+        {/* Pipeline View (Kanban) */}
+        {activeView === 'pipeline' && (
+          <div className="flex gap-4 overflow-x-auto pb-4">
+            {STAGES.map(stage => {
+              const stageProducts = getProductsByStage(stage.key)
+              return (
+                <div
+                  key={stage.key}
+                  className="flex-shrink-0 w-56 bg-slate-900 rounded-lg"
+                >
+                  {/* Column Header */}
+                  <div className={`${stage.color} rounded-t-lg px-3 py-2 flex items-center justify-between`}>
+                    <span className="font-medium text-sm">
+                      {stage.icon} {stage.label}
+                    </span>
+                    <span className="bg-black/30 px-2 py-0.5 rounded text-xs">
+                      {stageProducts.length}
+                    </span>
+                  </div>
+
+                  {/* Cards */}
+                  <div className="p-2 space-y-2 max-h-96 overflow-y-auto">
+                    {stageProducts.length === 0 ? (
+                      <div className="text-center text-gray-500 text-xs py-4">
+                        No items
+                      </div>
+                    ) : (
+                      stageProducts.map(product => (
+                        <div
+                          key={product.id}
+                          onClick={() => fetchProductDetail(product.id)}
+                          className={`bg-slate-800 rounded-lg p-3 cursor-pointer hover:bg-slate-700 transition-colors ${
+                            selectedProduct?.id === product.id ? 'ring-2 ring-cyan-500' : ''
+                          }`}
+                        >
+                          {/* Title & Type */}
+                          <div className="flex items-start justify-between gap-2 mb-2">
+                            <span className="text-sm font-medium line-clamp-2">
+                              {TYPE_ICONS[product.type]} {product.title}
+                            </span>
+                          </div>
+
+                          {/* Priority & Assignee */}
+                          <div className="flex items-center justify-between text-xs">
+                            <span className={`px-1.5 py-0.5 rounded ${PRIORITY_COLORS[product.priority]}`}>
+                              {product.priority}
+                            </span>
+                            {product.assignee && (
+                              <span className="text-gray-400">{product.assignee}</span>
+                            )}
+                          </div>
+
+                          {/* Days in stage & QA status */}
+                          <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
+                            <span>{product.days_in_stage}d</span>
+                            {stage.key === 'qa_testing' && (
+                              <span className={product.qa_passed ? 'text-green-400' : 'text-yellow-400'}>
+                                {product.qa_passed ? '✓ QA Passed' : '⏳ Testing'}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+
+            {/* Blocked Column */}
+            {dashboard && dashboard.blocked_count > 0 && (
+              <div className="flex-shrink-0 w-56 bg-slate-900 rounded-lg">
+                <div className="bg-red-600 rounded-t-lg px-3 py-2 flex items-center justify-between">
+                  <span className="font-medium text-sm">🚫 Blocked</span>
+                  <span className="bg-black/30 px-2 py-0.5 rounded text-xs">
+                    {dashboard.blocked_count}
+                  </span>
+                </div>
+                <div className="p-2 space-y-2 max-h-96 overflow-y-auto">
+                  {getProductsByStage('blocked').map(product => (
+                    <div
+                      key={product.id}
+                      onClick={() => fetchProductDetail(product.id)}
+                      className="bg-slate-800 rounded-lg p-3 cursor-pointer hover:bg-slate-700 border-l-2 border-red-500"
+                    >
+                      <div className="text-sm font-medium line-clamp-2">
+                        {TYPE_ICONS[product.type]} {product.title}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Detail Panel */}
-      {selectedProduct && (
+      {/* Pipeline Detail Panel */}
+      {activeView === 'pipeline' && selectedProduct && (
         <div className="bg-slate-800 rounded-lg p-6">
           <div className="flex items-start justify-between mb-4">
             <div>
@@ -355,7 +562,6 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
           <div className="grid grid-cols-2 gap-6">
             {/* Left: Info */}
             <div className="space-y-4">
-              {/* Status Row */}
               <div className="flex items-center gap-4 text-sm">
                 <span className={`px-2 py-1 rounded ${PRIORITY_COLORS[selectedProduct.priority]}`}>
                   {selectedProduct.priority}
@@ -370,7 +576,6 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
                 )}
               </div>
 
-              {/* Description */}
               <div>
                 <h4 className="text-sm font-medium text-gray-400 mb-1">Description</h4>
                 <p className="text-sm text-white bg-slate-700 p-3 rounded">
@@ -378,17 +583,6 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
                 </p>
               </div>
 
-              {/* Spec Doc */}
-              {selectedProduct.spec_doc && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-400 mb-1">Specification</h4>
-                  <pre className="text-sm text-white bg-slate-700 p-3 rounded whitespace-pre-wrap">
-                    {selectedProduct.spec_doc}
-                  </pre>
-                </div>
-              )}
-
-              {/* Acceptance Criteria */}
               {selectedProduct.acceptance_criteria.length > 0 && (
                 <div>
                   <h4 className="text-sm font-medium text-gray-400 mb-1">Acceptance Criteria</h4>
@@ -403,9 +597,8 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
               )}
             </div>
 
-            {/* Right: QA & UAT */}
+            {/* Right: QA & Actions */}
             <div className="space-y-4">
-              {/* QA Results */}
               <div>
                 <h4 className="text-sm font-medium text-gray-400 mb-2">
                   QA Results ({selectedProduct.qa_score.toFixed(0)}% pass rate)
@@ -422,48 +615,140 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
                         }`}
                       >
                         <span>{r.passed ? '✓' : '✗'} {r.test_name}</span>
-                        <span className="text-xs">{r.details}</span>
                       </div>
                     ))}
                   </div>
                 )}
               </div>
 
-              {/* UAT Feedback */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-400 mb-2">
-                  UAT Feedback {selectedProduct.uat_approved && '✓ Approved'}
-                </h4>
-                {selectedProduct.uat_feedback.length === 0 ? (
-                  <p className="text-sm text-gray-500">No UAT feedback yet</p>
-                ) : (
-                  <div className="space-y-2">
-                    {selectedProduct.uat_feedback.map((f, i) => (
-                      <div key={i} className="text-sm bg-slate-700 p-2 rounded">
-                        <p className="text-white">{f.feedback}</p>
-                        <div className="flex items-center justify-between mt-1 text-xs text-gray-400">
-                          <span>{f.approved === true ? '✓ Approved' : f.approved === false ? '✗ Rejected' : 'Pending'}</span>
-                          <span>{new Date(f.timestamp).toLocaleDateString()}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Actions */}
               <div className="pt-4 border-t border-slate-700">
-                <h4 className="text-sm font-medium text-gray-400 mb-2">Actions</h4>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAdvance(selectedProduct.id)}
-                    disabled={actionLoading === selectedProduct.id || selectedProduct.stage === 'done'}
-                    className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-sm"
-                  >
-                    {actionLoading === selectedProduct.id ? '...' : '⏭️ Advance Stage'}
-                  </button>
-                </div>
+                <button
+                  onClick={() => handleAdvance(selectedProduct.id)}
+                  disabled={actionLoading === selectedProduct.id || selectedProduct.stage === 'done'}
+                  className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-600 disabled:cursor-not-allowed rounded text-sm"
+                >
+                  {actionLoading === selectedProduct.id ? '...' : '⏭️ Advance Stage'}
+                </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Catalog Detail Modal */}
+      {selectedCatalogProduct && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 rounded-lg w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-slate-700">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                  {STATUS_CONFIG[selectedCatalogProduct.status]?.icon} {selectedCatalogProduct.name}
+                </h3>
+                <p className="text-sm text-gray-400">
+                  {selectedCatalogProduct.version} • {STATUS_CONFIG[selectedCatalogProduct.status]?.label}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedCatalogProduct(null)}
+                className="text-gray-400 hover:text-white text-2xl"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Quick Links */}
+              <div className="flex gap-2 flex-wrap">
+                {selectedCatalogProduct.links.demo && (
+                  <a
+                    href={selectedCatalogProduct.links.demo}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-cyan-600 hover:bg-cyan-500 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    🌐 Open Demo
+                  </a>
+                )}
+                {selectedCatalogProduct.links.api && (
+                  <a
+                    href={selectedCatalogProduct.links.api}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    📡 API Docs
+                  </a>
+                )}
+                {selectedCatalogProduct.links.source && (
+                  <a
+                    href={selectedCatalogProduct.links.source}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-3 py-2 bg-slate-600 hover:bg-slate-500 rounded-lg text-sm flex items-center gap-2"
+                  >
+                    💻 Source Code
+                  </a>
+                )}
+              </div>
+
+              {/* Description */}
+              <div>
+                <h4 className="text-sm font-medium text-gray-400 mb-2">Description</h4>
+                <p className="text-white bg-slate-700 p-3 rounded">{selectedCatalogProduct.description}</p>
+              </div>
+
+              {/* Features */}
+              {selectedCatalogProduct.features.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Features</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCatalogProduct.features.map((f, i) => (
+                      <span key={i} className="bg-green-500/20 text-green-400 px-3 py-1 rounded-lg text-sm">
+                        ✓ {f}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Tech Stack */}
+              {Object.keys(selectedCatalogProduct.tech_stack).length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Tech Stack</h4>
+                  <div className="bg-slate-700 rounded-lg p-3 space-y-2">
+                    {selectedCatalogProduct.tech_stack.frontend && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Frontend</span>
+                        <span className="text-white">{selectedCatalogProduct.tech_stack.frontend}</span>
+                      </div>
+                    )}
+                    {selectedCatalogProduct.tech_stack.backend && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Backend</span>
+                        <span className="text-white">{selectedCatalogProduct.tech_stack.backend}</span>
+                      </div>
+                    )}
+                    {selectedCatalogProduct.tech_stack.database && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-400">Database</span>
+                        <span className="text-white">{selectedCatalogProduct.tech_stack.database}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Full Content */}
+              {selectedCatalogProduct.full_content && (
+                <div>
+                  <h4 className="text-sm font-medium text-gray-400 mb-2">Full Documentation</h4>
+                  <pre className="bg-slate-900 p-4 rounded-lg text-sm text-gray-300 overflow-x-auto whitespace-pre-wrap max-h-96 overflow-y-auto">
+                    {selectedCatalogProduct.full_content}
+                  </pre>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -526,27 +811,6 @@ export default function ProductBoard({ apiUrl }: ProductBoardProps) {
                     <option value="low">Low</option>
                   </select>
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Target Release</label>
-                <input
-                  type="text"
-                  value={newProduct.target_release}
-                  onChange={e => setNewProduct({ ...newProduct, target_release: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-700 rounded text-white"
-                  placeholder="e.g., v1.0.0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-gray-400 mb-1">Specification</label>
-                <textarea
-                  value={newProduct.spec_doc}
-                  onChange={e => setNewProduct({ ...newProduct, spec_doc: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-700 rounded text-white h-24"
-                  placeholder="Technical specification..."
-                />
               </div>
 
               <div>

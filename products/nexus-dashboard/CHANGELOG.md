@@ -7,6 +7,25 @@
 
 ---
 
+## [0.8.0] - 2026-02-07
+
+### Added（新增）
+- Product Catalog 視圖（PROPOSAL-003）
+- 產品目錄 API（`/api/v1/catalog`）
+- Product Board 雙視圖切換（Catalog / Pipeline）
+- 產品卡片與詳情彈窗
+
+### Changed（變更）
+- ProductBoard.tsx 重構為雙視圖架構
+- 更新文件對齊最新版本
+
+### Technical（技術）
+- 新增 `backend/app/api/catalog.py`
+- 修改 `backend/app/main.py`（加入 catalog router）
+- 重寫 `frontend/src/components/ProductBoard.tsx`
+
+---
+
 ## [0.7.0] - 2026-02-07
 
 ### Added（新增）
@@ -105,17 +124,15 @@
 
 ## 發布計劃
 
-### [0.8.0] - 計劃中
+### [0.9.0] - 計劃中
 - [ ] BUILDER Agent 實作
 - [ ] INSPECTOR Agent 實作
 - [ ] 自動化測試
 
-### [0.9.0] - 計劃中
+### [1.0.0] - 計劃中
 - [ ] 資料庫持久化（PostgreSQL）
 - [ ] LEDGER Agent 實作
 - [ ] 完整 Engine 實作
-
-### [1.0.0] - 計劃中
 - [ ] 所有核心 Agent 完成
 - [ ] 自動化工作流程
 - [ ] Production 部署

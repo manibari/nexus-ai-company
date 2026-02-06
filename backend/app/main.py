@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, agents, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
+from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
 from app.db.database import create_tables
 
 
@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Nexus AI Company",
     description="零員工、全智能的虛擬企業系統 API",
-    version="0.1.0",
+    version="0.8.0",
     lifespan=lifespan,
 )
 
@@ -50,6 +50,7 @@ app.include_router(intake.router, prefix="/api/v1/intake", tags=["CEO Intake"])
 app.include_router(goals.router, prefix="/api/v1/goals", tags=["Goals"])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Sales Pipeline"])
 app.include_router(product.router, prefix="/api/v1/product", tags=["Product Board"])
+app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["Product Catalog"])
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge Base"])
 app.include_router(activity.router, prefix="/api/v1/activity", tags=["Agent Activity Log"])
 

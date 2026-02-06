@@ -2,7 +2,7 @@
 
 > **零員工、全智能的虛擬企業系統**
 >
-> 最後更新：2026-02-07 | 版本：0.7.0
+> 最後更新：2026-02-07 | 版本：0.8.0
 
 ---
 
@@ -206,6 +206,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | ADR-010 Goal Execution | `backend/app/goals/`, `backend/app/api/goals.py` |
 | ADR-011 Sales Pipeline | `backend/app/pipeline/`, `backend/app/api/pipeline.py` |
 | Product Board | `backend/app/product/`, `backend/app/api/product.py` |
+| Product Catalog | `backend/app/api/catalog.py`, `products/` |
 | Knowledge Base | `backend/app/knowledge/`, `backend/app/api/knowledge.py` |
 | Agent Configs | `backend/config/agents/*.yaml` |
 
@@ -215,7 +216,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 |------|------|------|
 | SalesPipeline | `frontend/src/components/SalesPipeline.tsx` | Sales Board UI |
 | GoalDashboard | `frontend/src/components/GoalDashboard.tsx` | Project Board UI |
-| ProductBoard | `frontend/src/components/ProductBoard.tsx` | Product Board UI (Kanban) |
+| ProductBoard | `frontend/src/components/ProductBoard.tsx` | Product Board UI (Catalog + Pipeline 雙視圖) |
 | KnowledgeBase | `frontend/src/components/KnowledgeBase.tsx` | Knowledge Base UI (Search + Markdown) |
 | CEOInbox | `frontend/src/components/CEOInbox.tsx` | Inbox UI |
 | OfficeMap | `frontend/src/components/OfficeMap.tsx` | 2.5D Office Map |
@@ -233,6 +234,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | 2024-02-06 | 0.5.0 | 新增 ADR-011 Sales Pipeline、2.5D Office Map、Tab 順序調整 |
 | 2024-02-06 | 0.6.0 | 新增 Product Board、Knowledge Base UI、Tab 更新為 6 個 |
 | 2026-02-07 | 0.7.0 | 新增敏捷開發流程（整合 Product Board）、範本庫、提案系統 |
+| 2026-02-07 | 0.8.0 | 新增產品目錄系統（PROPOSAL-002）、Product Catalog 視圖（PROPOSAL-003）|
 
 ---
 
@@ -247,7 +249,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | **Dashboard** | 總覽 Agent 狀態、2.5D 辦公室地圖、KPI 指標 | `OfficeMap.tsx` |
 | **Sales Board** | 商機追蹤、MEDDIC 分析、Pipeline 進度 | `SalesPipeline.tsx` |
 | **Project Board** | 專案執行、Goal → Phase → Checkpoint | `GoalDashboard.tsx` |
-| **Product Board** | 產品開發、P1-P6 階段、QA/UAT 追蹤 | `ProductBoard.tsx` |
+| **Product Board** | 產品目錄（Catalog）+ 開發流程（Pipeline P1-P6） | `ProductBoard.tsx` |
 | **Knowledge Base** | 知識庫、搜尋篩選、Markdown 渲染 | `KnowledgeBase.tsx` |
 | **Inbox** | 新輸入處理、決策審批、Agent 請求 | `CEOInbox.tsx` |
 
@@ -283,6 +285,8 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | 提案 | 主題 | 狀態 |
 |------|------|------|
 | [PROPOSAL-001](./proposals/PROPOSAL-001-Agile-Development-Process.md) | 敏捷開發流程 | ✅ 已核准 |
+| [PROPOSAL-002](./proposals/PROPOSAL-002-Product-Registry.md) | 產品目錄系統 | ✅ 已核准 |
+| [PROPOSAL-003](./proposals/PROPOSAL-003-Product-Catalog-View.md) | Product Catalog 視圖 | ✅ 已核准 |
 
 ---
 

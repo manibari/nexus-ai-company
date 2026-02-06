@@ -9,7 +9,7 @@
 | 產品 | 狀態 | 版本 | 說明 | 連結 |
 |------|------|------|------|------|
 | [StockPulse](./stockpulse/PRODUCT.md) | 🔵 MVP | v1.0.0 | 智能股票分析平台 | [Demo](http://localhost:4000) |
-| [Nexus Dashboard](./nexus-dashboard/PRODUCT.md) | 🔧 Dev | v0.7.0 | 內部管理系統 | [Demo](http://localhost:3000) |
+| [Nexus Dashboard](./nexus-dashboard/PRODUCT.md) | 🔧 Dev | v0.8.0 | 內部管理系統 | [Demo](http://localhost:3000) |
 
 ---
 
@@ -42,6 +42,7 @@
 
 | 日期 | 產品 | 變更 |
 |------|------|------|
+| 2026-02-07 | Nexus Dashboard | v0.8.0 Product Catalog 視圖 |
 | 2026-02-07 | StockPulse | v1.0.0 MVP 發布 |
 | 2026-02-07 | Nexus Dashboard | v0.7.0 敏捷流程整合 |
 

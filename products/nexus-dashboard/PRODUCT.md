@@ -8,7 +8,7 @@
 | 名稱 | Nexus Dashboard |
 | 類型 | 內部系統 |
 | 狀態 | 🔧 Development |
-| 版本 | v0.7.0 |
+| 版本 | v0.8.0 |
 | 開始日期 | 2024-02-06 |
 
 ---
@@ -25,7 +25,7 @@ Nexus AI Company 的核心管理系統，提供 Agent 管理、專案追蹤、�
 - ✅ 2.5D 辦公室地圖（Agent 視覺化）
 - ✅ Sales Pipeline（S1-S5 銷售管道）
 - ✅ Project Board（Goal → Phase → Checkpoint）
-- ✅ Product Board（P1-P6 產品開發看板）
+- ✅ Product Board（Catalog 產品目錄 + Pipeline P1-P6 開發看板）
 - ✅ Knowledge Base（知識庫搜尋）
 - ✅ CEO Inbox（待辦、審批、問卷）
 - ✅ 敏捷開發流程（整合 Product Board）
@@ -119,7 +119,7 @@ cd frontend && npm run dev
 | Dashboard | Agent 狀態、2.5D 辦公室 | OfficeMap.tsx |
 | Sales Board | 商機追蹤、MEDDIC | SalesPipeline.tsx |
 | Project Board | 專案執行、目標管理 | GoalDashboard.tsx |
-| Product Board | 產品開發、P1-P6 看板 | ProductBoard.tsx |
+| Product Board | 產品目錄 + 開發 Pipeline | ProductBoard.tsx |
 | Knowledge Base | 知識庫搜尋 | KnowledgeBase.tsx |
 | Inbox | CEO 待辦、審批 | CEOInbox.tsx |
 
