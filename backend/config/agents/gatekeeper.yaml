@@ -1,0 +1,232 @@
+# ===========================================
+# GATEKEEPER (Admin Agent) 行為規則
+# ===========================================
+# 擴展職責：CEO 輸入端 (Intake Point)
+
+name: "Admin Agent"
+version: "2.0.0"  # 升級版本，反映新增職責
+
+# -----------------------------
+# 核心職責
+# -----------------------------
+responsibilities:
+  # 原有職責
+  - schedule_management    # 行程管理
+  - information_summary    # 資訊摘要
+
+  # 新增職責 (ADR-006)
+  - ceo_intake            # CEO 輸入處理
+  - intent_recognition    # 意圖識別
+  - data_structuring      # 資料結構化
+  - smart_routing         # 智能路由
+  - information_enrichment # 資訊補全
+
+# -----------------------------
+# CEO 輸入處理規則
+# -----------------------------
+intake:
+  # 支援的輸入類型
+  supported_types:
+    - text              # 純文字
+    - email             # 轉發 Email
+    - url               # 網址連結
+    - voice             # 語音（未來支援）
+    - image             # 圖片/名片（未來支援）
+
+  # 意圖識別設定
+  intent_recognition:
+    # 信心度門檻
+    confidence_threshold: 0.7
+
+    # 低於此門檻需要 CEO 確認
+    confirmation_threshold: 0.8
+
+    # 意圖類別
+    intents:
+      opportunity:
+        keywords:
+          - 商機
+          - 客戶
+          - 合作
+          - 有興趣
+          - 潛在
+          - lead
+          - prospect
+          - 介紹
+          - 公司
+          - partner
+        route_to: HUNTER
+        requires_confirmation: true
+
+      project:
+        keywords:
+          - 專案
+          - 開發
+          - 功能
+          - 需求
+          - 實作
+          - feature
+          - 做一個
+          - 新增
+        route_to: ORCHESTRATOR
+        requires_confirmation: true
+
+      question:
+        keywords:
+          - "?"
+          - "？"
+          - 什麼
+          - 如何
+          - 為什麼
+          - 怎麼
+        route_to: null  # 直接回覆
+        requires_confirmation: false
+
+      task:
+        keywords:
+          - 幫我
+          - 記得
+          - 提醒
+          - 安排
+          - 待辦
+          - todo
+        route_to: GATEKEEPER
+        requires_confirmation: false
+
+  # 資訊補全設定
+  enrichment:
+    enabled: true
+
+    # 自動補全的資訊類型
+    auto_enrich:
+      - company_info      # 公司基本資訊
+      - contact_info      # 聯絡人資訊
+      - industry_info     # 產業資訊
+
+    # 手動觸發的補全
+    manual_enrich:
+      - news              # 相關新聞
+      - funding           # 融資資訊
+      - competitors       # 競爭對手
+
+    # 資料來源優先順序
+    sources:
+      - website           # 公司官網
+      - linkedin          # LinkedIn
+      - crunchbase        # Crunchbase
+      - google            # Google 搜尋
+
+  # 結構化規則
+  structuring:
+    # 商機必要欄位
+    opportunity_required_fields:
+      - company_name
+
+    # 商機建議欄位
+    opportunity_suggested_fields:
+      - contact_name
+      - contact_email
+      - industry
+      - urgency
+
+# -----------------------------
+# 路由規則
+# -----------------------------
+routing:
+  # 預設路由
+  default_route: null  # 不自動路由，等待確認
+
+  # 自動路由條件
+  auto_route:
+    enabled: false  # 預設需要確認
+    confidence_threshold: 0.95  # 極高信心度才自動路由
+
+  # 路由目標
+  targets:
+    HUNTER:
+      intents: [opportunity]
+      priority_boost: true  # CEO 來源提高優先級
+
+    ORCHESTRATOR:
+      intents: [project]
+
+    LEDGER:
+      intents: [budget_query, cost_query]
+
+# -----------------------------
+# 確認流程
+# -----------------------------
+confirmation:
+  # 需要確認的情況
+  always_confirm:
+    - intent: opportunity
+    - confidence_below: 0.8
+    - has_ambiguity: true
+
+  # 確認超時
+  timeout_hours: 24
+
+  # 超時後動作
+  on_timeout: "archive"  # archive, auto_confirm, notify_again
+
+# -----------------------------
+# 通知設定
+# -----------------------------
+notifications:
+  # 新輸入通知
+  on_new_input:
+    notify: [CEO]
+    channels: [inbox, websocket]
+    priority: normal
+
+  # 處理完成通知
+  on_processed:
+    notify: [CEO]
+    channels: [inbox]
+
+  # 路由通知
+  on_routed:
+    notify: [target_agent, CEO]
+
+# -----------------------------
+# 學習機制
+# -----------------------------
+learning:
+  enabled: true
+
+  # 從 CEO 確認/拒絕中學習
+  learn_from_confirmations: true
+
+  # 從 CEO 修改中學習
+  learn_from_modifications: true
+
+  # 記錄用於改進
+  track_metrics:
+    - intent_accuracy
+    - confirmation_rate
+    - modification_rate
+
+# -----------------------------
+# 時程規則（繼承原有）
+# -----------------------------
+schedule:
+  # GATEKEEPER 24/7 運作
+  blackout_days: []
+  preferred_hours_start: "00:00"
+  preferred_hours_end: "23:59"
+  timezone: "Asia/Taipei"
+
+# -----------------------------
+# 升級規則
+# -----------------------------
+escalation:
+  # 無法識別時升級
+  on_unknown_intent:
+    action: request_confirmation
+    notify: [CEO]
+
+  # 處理失敗時升級
+  on_processing_error:
+    action: notify
+    notify: [CEO]
+    include_error_details: true
