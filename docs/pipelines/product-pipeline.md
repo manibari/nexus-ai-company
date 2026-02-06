@@ -14,6 +14,7 @@ class ProductStage(Enum):
     """產品開發流水線階段"""
 
     P1_BACKLOG = "backlog"
+    P1_5_REQUIREMENTS = "requirements"  # 新增：需求蒐集
     P2_SPEC_READY = "spec_ready"
     P3_IN_PROGRESS = "in_progress"
     P4_QA_TESTING = "qa_testing"
@@ -31,7 +32,14 @@ class ProductStage(Enum):
                     │ P1: Backlog │
                     │  (CEO 想法)  │
                     └──────┬──────┘
-                           │ spec()
+                           │ gather_requirements()
+                           ▼
+                    ┌─────────────────┐
+                    │ P1.5: Requirements │  ← 新增階段
+                    │   (需求蒐集)      │
+                    │   PM ↔ CEO 對話   │
+                    └──────┬──────────┘
+                           │ approve_prd()
                            ▼
                     ┌─────────────┐
                     │ P2: Spec    │
@@ -362,6 +370,33 @@ class ProductPipeline:
 | 來源 | CEO 手動輸入、Agent 建議 |
 | 資料需求 | 標題、簡述（可模糊） |
 | 負責人 | None（待認領） |
+
+### P1.5: Requirements (需求蒐集) 🆕
+
+| 項目 | 說明 |
+|------|------|
+| 來源 | PM 從 P1 認領後進入 |
+| 資料需求 | 需求問卷回覆 |
+| 負責人 | PM Agent (ORCHESTRATOR) |
+| 產出文件 | PRD 草案 (`PRD-{id}.md`) |
+| CEO 操作 | 回覆需求問卷、確認 PRD |
+| 進入 P2 條件 | CEO 確認 PRD |
+
+**需求問卷標準項目**：
+1. 目標用戶 (Target Users)
+2. 核心功能 (Core Features)
+3. 數據來源 (Data Sources)
+4. 技術平台 (Tech Platform)
+5. 整合需求 (Integrations)
+6. 預算時程 (Budget & Timeline)
+7. 法規遵循 (Compliance)
+8. 商業模式 (Business Model)
+9. 成功指標 (Success Metrics)
+10. 優先順序 (Priority)
+
+**參考文件**：
+- [PRD 模板](../templates/PRD-template.md)
+- [ADR-014: Requirements Gathering](../decisions/ADR-014-requirements-gathering.md)
 
 ### P2: Spec Ready (規格確認)
 
