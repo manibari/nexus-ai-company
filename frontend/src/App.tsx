@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react'
 import CEOInbox from './components/CEOInbox'
 import GoalDashboard from './components/GoalDashboard'
 import SalesPipeline from './components/SalesPipeline'
+import OfficeMap from './components/OfficeMap'
 
 interface Agent {
   id: string
@@ -176,19 +177,8 @@ function App() {
                   </div>
                 </div>
 
-                {/* Office Map Placeholder */}
-                <div className="bg-slate-800 rounded-lg p-6">
-                  <h2 className="text-xl font-bold mb-4 text-cyan-300">
-                    🗺️ Office Map
-                  </h2>
-                  <div className="h-64 bg-slate-700 rounded-lg flex items-center justify-center text-gray-500">
-                    <div className="text-center">
-                      <div className="text-4xl mb-2">🏗️</div>
-                      <div>RPG 2.5D Office Map</div>
-                      <div className="text-sm mt-1">Coming Soon</div>
-                    </div>
-                  </div>
-                </div>
+                {/* Office Map */}
+                <OfficeMap apiUrl={API_URL} />
               </>
             )}
           </div>
