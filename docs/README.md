@@ -16,6 +16,7 @@
 | 怎麼驗證系統？ | [scenarios/README.md](./scenarios/README.md) |
 | **開發流程規範** | [protocols/agile_workflow.md](./protocols/agile_workflow.md) |
 | **文件範本** | [templates/](#範本庫-templates) |
+| **產品目錄** | [products/README.md](../products/README.md) |
 
 ---
 
