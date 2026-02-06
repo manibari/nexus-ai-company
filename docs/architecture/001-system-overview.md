@@ -10,11 +10,17 @@
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        FRONTEND (React)                         │
+│  Tab Order: [Dashboard] → [Sales Pipeline] → [Goals] → [Inbox]  │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  RPG Map    │  │  HUD/KPI    │  │  Inbox (CEO Decisions)  │  │
-│  │  (Canvas)   │  │  Dashboard  │  │  - Approvals            │  │
+│  │ 2.5D Office │  │  HUD/KPI    │  │  Inbox (CEO Decisions)  │  │
+│  │ (SVG+Chars) │  │  Dashboard  │  │  - Approvals            │  │
 │  └─────────────┘  └─────────────┘  │  - UAT Reviews          │  │
 │                                     └─────────────────────────┘  │
+│  Office Map Features:                                            │
+│  • 2.5D Character sprites (body, hair, clothes, animations)      │
+│  • 9 rooms: CEO Office, Reception, Sales, War Room, etc.         │
+│  • Real-time agent status indicators                             │
+│  • Clickable agents with detail panel                            │
 └────────────────────────────┬────────────────────────────────────┘
                              │ WebSocket + REST API
                              ▼

@@ -21,7 +21,7 @@ function App() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [kpi, setKPI] = useState<KPI | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals' | 'pipeline'>('pipeline')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals' | 'pipeline'>('dashboard')
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -71,24 +71,14 @@ function App() {
           </div>
           <nav className="flex gap-2">
             <button
-              onClick={() => setActiveTab('inbox')}
+              onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'inbox'
+                activeTab === 'dashboard'
                   ? 'bg-cyan-600 text-white'
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              📥 CEO Inbox
-            </button>
-            <button
-              onClick={() => setActiveTab('goals')}
-              className={`px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'goals'
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
-              }`}
-            >
-              🎯 Goals
+              📊 Dashboard
             </button>
             <button
               onClick={() => setActiveTab('pipeline')}
@@ -98,17 +88,27 @@ function App() {
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              💰 Pipeline
+              💰 Sales Pipeline
             </button>
             <button
-              onClick={() => setActiveTab('dashboard')}
+              onClick={() => setActiveTab('goals')}
               className={`px-4 py-2 rounded-lg transition-colors ${
-                activeTab === 'dashboard'
+                activeTab === 'goals'
                   ? 'bg-cyan-600 text-white'
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              📊 Dashboard
+              🎯 Project Goals
+            </button>
+            <button
+              onClick={() => setActiveTab('inbox')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                activeTab === 'inbox'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              📥 CEO Inbox
             </button>
           </nav>
         </div>

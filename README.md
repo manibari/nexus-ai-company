@@ -19,10 +19,11 @@ Project Nexus 是一個由 AI Agent 組成的自動化企業系統，包含：
 
 ## 特色
 
-- **RPG 風格戰情室**：2.5D 像素風辦公室，即時顯示 Agent 狀態
-- **雙 Pipeline 管理**：Sales Pipeline + Product Pipeline
+- **2.5D 戰情室 (War Room)**：辦公室地圖，每個 Agent 以精細的 2.5D 角色呈現（含身體、頭髮、衣服、狀態指示燈、工作動畫）
+- **雙 Pipeline 管理**：Sales Pipeline（商機追蹤）+ Goal Dashboard（專案執行）
 - **Human-in-the-Loop**：關鍵決策由 CEO 審批
 - **LLM Provider 可切換**：支援 Gemini / Claude / OpenAI
+- **Tab 導覽順序**：Dashboard → Sales Pipeline → Project Goals → CEO Inbox
 
 ## 快速開始
 

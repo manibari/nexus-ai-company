@@ -29,11 +29,17 @@
 ┌─────────────────────────────────────────────────────────────────┐
 │  Nexus AI Company - CEO War Room                                 │
 ├─────────────────────────────────────────────────────────────────┤
-│  [CEO Inbox] [🎯 Goals] [💰 Pipeline] [📊 Dashboard]             │
+│  [📊 Dashboard] [💰 Sales Pipeline] [🎯 Project Goals] [📥 CEO Inbox] │
 └─────────────────────────────────────────────────────────────────┘
-         ↓           ↓              ↓
-     輸入任務    專案管理      銷售管理
+         ↓                 ↓                  ↓              ↓
+    總覽儀表板        銷售管理          專案管理       輸入/審批
 ```
+
+**Tab 順序說明**：
+- **Dashboard**：總覽 Agent 狀態、2.5D 辦公室地圖、KPI
+- **Sales Pipeline**：商機追蹤、MEDDIC 分析、Pipeline 進度
+- **Project Goals**：專案執行、Phase 進度、時間追蹤
+- **CEO Inbox**：新輸入、決策審批、Agent 請求
 
 ## 核心概念
 

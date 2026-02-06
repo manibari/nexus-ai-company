@@ -63,6 +63,7 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 | [008](./decisions/ADR-008-knowledge-base.md) | Knowledge Base | 已採納 | Embedding + RAG 檢索 + 內容生成（增強層）|
 | [009](./decisions/ADR-009-knowledge-management.md) | Knowledge Management | 已採納 | 知識管理基礎：儲存、分類、標籤、全文搜尋 |
 | [010](./decisions/ADR-010-goal-driven-execution.md) | Goal-Driven Execution | 已採納 | 目標導向執行：Goal → Phase → Checkpoint |
+| [011](./decisions/ADR-011-sales-pipeline.md) | Sales Pipeline | 已採納 | 獨立銷售管理：Opportunity + MEDDIC + Pipeline Stages |
 
 ### 新增 ADR 規範
 
@@ -79,8 +80,9 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        Frontend                              │
-│                     (Next.js + React)                        │
-│                    RPG 風格戰情室 UI                          │
+│                      (Vite + React)                          │
+│   Tab: Dashboard → Sales Pipeline → Project Goals → Inbox    │
+│   2.5D Office Map: Character sprites, rooms, animations      │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -193,6 +195,22 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | 2024-02-06 | 0.2.0 | 新增 ADR-008 Knowledge Base、架構圖更新 |
 | 2024-02-06 | 0.3.0 | 新增 ADR-009 Knowledge Management（知識管理基礎）|
 | 2024-02-06 | 0.4.0 | 新增 ADR-010 Goal-Driven Execution（目標導向執行）|
+| 2024-02-06 | 0.5.0 | 新增 ADR-011 Sales Pipeline、2.5D Office Map、Tab 順序調整 |
+
+---
+
+## 前端 Tab 順序
+
+```
+[📊 Dashboard] → [💰 Sales Pipeline] → [🎯 Project Goals] → [📥 CEO Inbox]
+```
+
+| Tab | 功能 |
+|-----|------|
+| **Dashboard** | 總覽 Agent 狀態、2.5D 辦公室地圖、KPI 指標 |
+| **Sales Pipeline** | 商機追蹤、MEDDIC 分析、Pipeline 進度視覺化 |
+| **Project Goals** | 專案執行追蹤、Phase 進度、時間管理 |
+| **CEO Inbox** | 新輸入處理、決策審批、Agent 請求 |
 
 ---
 

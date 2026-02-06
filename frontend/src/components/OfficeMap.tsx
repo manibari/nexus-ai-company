@@ -17,125 +17,143 @@ interface Room {
   height: number
   color: string
   icon: string
-  agents: string[] // Agent IDs that belong here
+  agents: string[]
 }
 
 interface OfficeMapProps {
   apiUrl: string
 }
 
-// Office layout configuration
 const ROOMS: Room[] = [
-  {
-    id: 'ceo_office',
-    name: 'CEO Office',
-    x: 10,
-    y: 10,
-    width: 180,
-    height: 120,
-    color: '#1e3a5f',
-    icon: '👔',
-    agents: [],
-  },
-  {
-    id: 'reception',
-    name: 'Reception',
-    x: 200,
-    y: 10,
-    width: 150,
-    height: 120,
-    color: '#1e4d3a',
-    icon: '🚪',
-    agents: ['GATEKEEPER'],
-  },
-  {
-    id: 'sales',
-    name: 'Sales',
-    x: 360,
-    y: 10,
-    width: 180,
-    height: 120,
-    color: '#4d1e3a',
-    icon: '💼',
-    agents: ['HUNTER'],
-  },
-  {
-    id: 'war_room',
-    name: 'War Room',
-    x: 10,
-    y: 140,
-    width: 200,
-    height: 130,
-    color: '#3a1e4d',
-    icon: '🎯',
-    agents: ['ORCHESTRATOR'],
-  },
-  {
-    id: 'dev_lab',
-    name: 'Dev Lab',
-    x: 220,
-    y: 140,
-    width: 160,
-    height: 130,
-    color: '#1e3a4d',
-    icon: '💻',
-    agents: ['BUILDER'],
-  },
-  {
-    id: 'qa_station',
-    name: 'QA Station',
-    x: 390,
-    y: 140,
-    width: 150,
-    height: 130,
-    color: '#4d3a1e',
-    icon: '🔍',
-    agents: ['INSPECTOR'],
-  },
-  {
-    id: 'finance',
-    name: 'Finance',
-    x: 10,
-    y: 280,
-    width: 140,
-    height: 100,
-    color: '#2d4d1e',
-    icon: '📊',
-    agents: ['LEDGER'],
-  },
-  {
-    id: 'meeting',
-    name: 'Meeting Room',
-    x: 160,
-    y: 280,
-    width: 180,
-    height: 100,
-    color: '#1e2d4d',
-    icon: '🤝',
-    agents: [],
-  },
-  {
-    id: 'break_room',
-    name: 'Break Room',
-    x: 350,
-    y: 280,
-    width: 190,
-    height: 100,
-    color: '#4d4d1e',
-    icon: '☕',
-    agents: [],
-  },
+  { id: 'ceo_office', name: 'CEO Office', x: 20, y: 20, width: 160, height: 110, color: '#1e3a5f', icon: '👔', agents: [] },
+  { id: 'reception', name: 'Reception', x: 200, y: 20, width: 140, height: 110, color: '#1e4d3a', icon: '🚪', agents: ['GATEKEEPER'] },
+  { id: 'sales', name: 'Sales', x: 360, y: 20, width: 160, height: 110, color: '#4d1e3a', icon: '💼', agents: ['HUNTER'] },
+  { id: 'war_room', name: 'War Room', x: 20, y: 150, width: 170, height: 120, color: '#3a1e4d', icon: '🎯', agents: ['ORCHESTRATOR'] },
+  { id: 'dev_lab', name: 'Dev Lab', x: 210, y: 150, width: 150, height: 120, color: '#1e3a4d', icon: '💻', agents: ['BUILDER'] },
+  { id: 'qa_station', name: 'QA Station', x: 380, y: 150, width: 140, height: 120, color: '#4d3a1e', icon: '🔍', agents: ['INSPECTOR'] },
+  { id: 'finance', name: 'Finance', x: 20, y: 290, width: 130, height: 100, color: '#2d4d1e', icon: '📊', agents: ['LEDGER'] },
+  { id: 'meeting', name: 'Meeting Room', x: 170, y: 290, width: 170, height: 100, color: '#1e2d4d', icon: '🤝', agents: [] },
+  { id: 'break_room', name: 'Break Room', x: 360, y: 290, width: 160, height: 100, color: '#4d4d1e', icon: '☕', agents: [] },
 ]
 
-// Agent avatar configuration
-const AGENT_AVATARS: Record<string, { emoji: string; color: string }> = {
-  GATEKEEPER: { emoji: '🛡️', color: '#22c55e' },
-  HUNTER: { emoji: '🎯', color: '#f59e0b' },
-  ORCHESTRATOR: { emoji: '🎭', color: '#8b5cf6' },
-  BUILDER: { emoji: '🔧', color: '#3b82f6' },
-  INSPECTOR: { emoji: '🔬', color: '#ec4899' },
-  LEDGER: { emoji: '📒', color: '#14b8a6' },
+// Agent character colors
+const AGENT_COLORS: Record<string, { skin: string; shirt: string; hair: string }> = {
+  GATEKEEPER: { skin: '#fcd5b5', shirt: '#22c55e', hair: '#4a3728' },
+  HUNTER: { skin: '#e8beac', shirt: '#f59e0b', hair: '#1a1a1a' },
+  ORCHESTRATOR: { skin: '#fcd5b5', shirt: '#8b5cf6', hair: '#6b4423' },
+  BUILDER: { skin: '#d4a574', shirt: '#3b82f6', hair: '#1a1a1a' },
+  INSPECTOR: { skin: '#fcd5b5', shirt: '#ec4899', hair: '#8b4513' },
+  LEDGER: { skin: '#e8beac', shirt: '#14b8a6', hair: '#2d2d2d' },
 }
+
+// 2.5D Character component
+const Character = ({
+  x, y, colors, status, isSelected, onClick, name, isWorking
+}: {
+  x: number
+  y: number
+  colors: { skin: string; shirt: string; hair: string }
+  status: string
+  isSelected: boolean
+  onClick: () => void
+  name: string
+  isWorking: boolean
+}) => {
+  const statusColor = status === 'working' ? '#22c55e' :
+                      status === 'idle' ? '#6b7280' :
+                      status === 'blocked_internal' ? '#f59e0b' : '#ef4444'
+
+  return (
+    <g
+      onClick={onClick}
+      style={{ cursor: 'pointer' }}
+      className={isWorking ? 'animate-bounce-subtle' : ''}
+    >
+      {/* Shadow */}
+      <ellipse cx={x} cy={y + 38} rx="14" ry="5" fill="rgba(0,0,0,0.3)" />
+
+      {/* Selection ring */}
+      {isSelected && (
+        <ellipse cx={x} cy={y + 38} rx="20" ry="7" fill="none" stroke="#22d3ee" strokeWidth="2" />
+      )}
+
+      {/* Legs */}
+      <rect x={x - 6} y={y + 18} width="5" height="18" rx="2" fill="#1e293b" />
+      <rect x={x + 1} y={y + 18} width="5" height="18" rx="2" fill="#1e293b" />
+
+      {/* Body */}
+      <rect x={x - 10} y={y} width="20" height="22" rx="4" fill={colors.shirt} />
+
+      {/* Arms */}
+      <rect x={x - 14} y={y + 2} width="5" height="14" rx="2" fill={colors.shirt} />
+      <rect x={x + 9} y={y + 2} width="5" height="14" rx="2" fill={colors.shirt} />
+
+      {/* Hands */}
+      <circle cx={x - 12} cy={y + 18} r="3" fill={colors.skin} />
+      <circle cx={x + 12} cy={y + 18} r="3" fill={colors.skin} />
+
+      {/* Head */}
+      <ellipse cx={x} cy={y - 8} rx="10" ry="12" fill={colors.skin} />
+
+      {/* Hair */}
+      <ellipse cx={x} cy={y - 16} rx="10" ry="6" fill={colors.hair} />
+      <rect x={x - 10} y={y - 16} width="20" height="6" fill={colors.hair} />
+
+      {/* Eyes */}
+      <circle cx={x - 4} cy={y - 8} r="2" fill="#1a1a1a" />
+      <circle cx={x + 4} cy={y - 8} r="2" fill="#1a1a1a" />
+      <circle cx={x - 3} cy={y - 9} r="0.8" fill="white" />
+      <circle cx={x + 5} cy={y - 9} r="0.8" fill="white" />
+
+      {/* Mouth */}
+      <path
+        d={status === 'working' ? `M ${x-3} ${y-3} Q ${x} ${y-1} ${x+3} ${y-3}` : `M ${x-2} ${y-4} L ${x+2} ${y-4}`}
+        stroke="#1a1a1a"
+        strokeWidth="1"
+        fill="none"
+      />
+
+      {/* Status indicator */}
+      <circle cx={x + 12} cy={y - 18} r="5" fill={statusColor} stroke="#0f172a" strokeWidth="2" />
+
+      {/* Working animation - floating icons */}
+      {isWorking && (
+        <>
+          <text x={x - 18} y={y - 25} fontSize="10" className="animate-float">💭</text>
+          <text x={x + 14} y={y - 28} fontSize="8" className="animate-float-delay">⚡</text>
+        </>
+      )}
+
+      {/* Name tag */}
+      <rect x={x - 22} y={y + 42} width="44" height="14" rx="3" fill="#0f172a" opacity="0.8" />
+      <text x={x} y={y + 52} fill="#94a3b8" fontSize="8" textAnchor="middle" fontWeight="bold">
+        {name}
+      </text>
+    </g>
+  )
+}
+
+// Desk component
+const Desk = ({ x, y, hasComputer = true }: { x: number; y: number; hasComputer?: boolean }) => (
+  <g>
+    {/* Desk surface */}
+    <rect x={x} y={y} width="50" height="25" rx="3" fill="#5c4033" />
+    <rect x={x + 2} y={y + 2} width="46" height="21" rx="2" fill="#8b6914" />
+
+    {/* Desk legs */}
+    <rect x={x + 5} y={y + 25} width="4" height="12" fill="#5c4033" />
+    <rect x={x + 41} y={y + 25} width="4" height="12" fill="#5c4033" />
+
+    {/* Computer */}
+    {hasComputer && (
+      <>
+        <rect x={x + 15} y={y - 15} width="20" height="15" rx="2" fill="#1e293b" />
+        <rect x={x + 17} y={y - 13} width="16" height="10" fill="#0ea5e9" opacity="0.8" />
+        <rect x={x + 22} y={y} width="6" height="3" fill="#374151" />
+      </>
+    )}
+  </g>
+)
 
 export default function OfficeMap({ apiUrl }: OfficeMapProps) {
   const [agents, setAgents] = useState<Agent[]>([])
@@ -147,14 +165,12 @@ export default function OfficeMap({ apiUrl }: OfficeMapProps) {
       try {
         const response = await fetch(`${apiUrl}/api/v1/agents`)
         if (response.ok) {
-          const data = await response.json()
-          setAgents(data)
+          setAgents(await response.json())
         }
       } catch (err) {
         console.error('Failed to fetch agents:', err)
       }
     }
-
     fetchAgents()
     const interval = setInterval(fetchAgents, 5000)
     return () => clearInterval(interval)
@@ -163,278 +179,133 @@ export default function OfficeMap({ apiUrl }: OfficeMapProps) {
   const getAgentPosition = (agentId: string): { x: number; y: number } | null => {
     for (const room of ROOMS) {
       if (room.agents.includes(agentId)) {
-        const index = room.agents.indexOf(agentId)
-        return {
-          x: room.x + 30 + (index % 2) * 50,
-          y: room.y + 50 + Math.floor(index / 2) * 40,
-        }
+        return { x: room.x + room.width / 2, y: room.y + 65 }
       }
     }
     return null
   }
 
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'working':
-        return '#22c55e'
-      case 'idle':
-        return '#6b7280'
-      case 'blocked_internal':
-        return '#f59e0b'
-      case 'blocked_user':
-        return '#ef4444'
-      default:
-        return '#6b7280'
-    }
-  }
-
-  const getStatusAnimation = (status: string): string => {
-    if (status === 'working') {
-      return 'animate-pulse'
-    }
-    return ''
-  }
-
   return (
     <div className="bg-slate-800 rounded-lg p-6">
-      <h2 className="text-xl font-bold mb-4 text-cyan-300 flex items-center gap-2">
-        🏢 Nexus AI Office
-        <span className="text-sm font-normal text-gray-400 ml-2">
-          ({agents.filter(a => a.status === 'working').length} working)
-        </span>
-      </h2>
+      <style>{`
+        @keyframes bounce-subtle {
+          0%, 100% { transform: translateY(0); }
+          50% { transform: translateY(-3px); }
+        }
+        @keyframes float {
+          0%, 100% { transform: translateY(0) rotate(-5deg); opacity: 1; }
+          50% { transform: translateY(-8px) rotate(5deg); opacity: 0.7; }
+        }
+        .animate-bounce-subtle { animation: bounce-subtle 1s ease-in-out infinite; }
+        .animate-float { animation: float 2s ease-in-out infinite; }
+        .animate-float-delay { animation: float 2s ease-in-out 0.5s infinite; }
+      `}</style>
 
-      {/* Legend */}
-      <div className="flex gap-4 mb-4 text-xs">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-green-500" />
-          <span className="text-gray-400">Working</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-gray-500" />
-          <span className="text-gray-400">Idle</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-yellow-500" />
-          <span className="text-gray-400">Blocked</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded-full bg-red-500" />
-          <span className="text-gray-400">Waiting CEO</span>
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-xl font-bold text-cyan-300 flex items-center gap-2">
+          🏢 Nexus AI Office
+          <span className="text-sm font-normal text-gray-400">
+            ({agents.filter(a => a.status === 'working').length}/{agents.length} working)
+          </span>
+        </h2>
+        <div className="flex gap-3 text-xs">
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Working</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-gray-500" /> Idle</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-yellow-500" /> Blocked</span>
+          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Waiting</span>
         </div>
       </div>
 
-      {/* Office Map SVG */}
-      <div className="relative bg-slate-900 rounded-lg overflow-hidden" style={{ height: '400px' }}>
-        <svg width="100%" height="100%" viewBox="0 0 560 400" preserveAspectRatio="xMidYMid meet">
-          {/* Floor pattern */}
+      <div className="relative bg-slate-900 rounded-lg overflow-hidden" style={{ height: '420px' }}>
+        <svg width="100%" height="100%" viewBox="0 0 540 410" preserveAspectRatio="xMidYMid meet">
+          {/* Floor */}
           <defs>
-            <pattern id="floor" width="20" height="20" patternUnits="userSpaceOnUse">
-              <rect width="20" height="20" fill="#1e293b" />
-              <rect width="10" height="10" fill="#0f172a" />
-              <rect x="10" y="10" width="10" height="10" fill="#0f172a" />
+            <pattern id="floor-tiles" width="30" height="30" patternUnits="userSpaceOnUse">
+              <rect width="30" height="30" fill="#1e293b" />
+              <rect width="14" height="14" fill="#0f172a" />
+              <rect x="15" y="15" width="14" height="14" fill="#0f172a" />
             </pattern>
           </defs>
-          <rect width="560" height="400" fill="url(#floor)" />
+          <rect width="540" height="410" fill="url(#floor-tiles)" />
 
           {/* Rooms */}
           {ROOMS.map((room) => (
-            <g
-              key={room.id}
-              onMouseEnter={() => setHoveredRoom(room.id)}
-              onMouseLeave={() => setHoveredRoom(null)}
-              style={{ cursor: 'pointer' }}
-            >
-              {/* Room background */}
+            <g key={room.id} onMouseEnter={() => setHoveredRoom(room.id)} onMouseLeave={() => setHoveredRoom(null)}>
               <rect
-                x={room.x}
-                y={room.y}
-                width={room.width}
-                height={room.height}
-                rx="8"
-                fill={room.color}
-                stroke={hoveredRoom === room.id ? '#22d3ee' : '#334155'}
-                strokeWidth={hoveredRoom === room.id ? 2 : 1}
-                opacity={0.8}
+                x={room.x} y={room.y} width={room.width} height={room.height} rx="6"
+                fill={room.color} stroke={hoveredRoom === room.id ? '#22d3ee' : '#334155'}
+                strokeWidth={hoveredRoom === room.id ? 2 : 1} opacity="0.85"
               />
+              <text x={room.x + 12} y={room.y + 20} fontSize="16">{room.icon}</text>
+              <text x={room.x + 32} y={room.y + 18} fill="#94a3b8" fontSize="10" fontWeight="bold">{room.name}</text>
 
-              {/* Room icon */}
-              <text
-                x={room.x + 15}
-                y={room.y + 25}
-                fontSize="20"
-              >
-                {room.icon}
-              </text>
-
-              {/* Room name */}
-              <text
-                x={room.x + 40}
-                y={room.y + 22}
-                fill="#94a3b8"
-                fontSize="11"
-                fontWeight="bold"
-              >
-                {room.name}
-              </text>
-
-              {/* Desk lines */}
+              {/* Desks */}
               {room.agents.length > 0 && (
-                <rect
-                  x={room.x + 20}
-                  y={room.y + 40}
-                  width={room.width - 40}
-                  height={4}
-                  fill="#475569"
-                  rx="2"
-                />
+                <Desk x={room.x + room.width / 2 - 25} y={room.y + 30} />
               )}
             </g>
           ))}
+
+          {/* Plants decoration */}
+          <text x="175" y="145" fontSize="20">🪴</text>
+          <text x="345" y="145" fontSize="20">🪴</text>
+          <text x="155" y="285" fontSize="18">🌿</text>
 
           {/* Agents */}
           {agents.map((agent) => {
             const pos = getAgentPosition(agent.id)
             if (!pos) return null
-
-            const avatar = AGENT_AVATARS[agent.id] || { emoji: '🤖', color: '#6b7280' }
-            const statusColor = getStatusColor(agent.status)
+            const colors = AGENT_COLORS[agent.id] || { skin: '#fcd5b5', shirt: '#6b7280', hair: '#4a3728' }
 
             return (
-              <g
+              <Character
                 key={agent.id}
+                x={pos.x}
+                y={pos.y}
+                colors={colors}
+                status={agent.status}
+                isSelected={selectedAgent?.id === agent.id}
                 onClick={() => setSelectedAgent(selectedAgent?.id === agent.id ? null : agent)}
-                style={{ cursor: 'pointer' }}
-                className={getStatusAnimation(agent.status)}
-              >
-                {/* Agent shadow */}
-                <ellipse
-                  cx={pos.x}
-                  cy={pos.y + 25}
-                  rx="18"
-                  ry="6"
-                  fill="rgba(0,0,0,0.3)"
-                />
-
-                {/* Agent body */}
-                <circle
-                  cx={pos.x}
-                  cy={pos.y}
-                  r="20"
-                  fill="#1e293b"
-                  stroke={selectedAgent?.id === agent.id ? '#22d3ee' : statusColor}
-                  strokeWidth={selectedAgent?.id === agent.id ? 3 : 2}
-                />
-
-                {/* Agent avatar */}
-                <text
-                  x={pos.x}
-                  y={pos.y + 6}
-                  fontSize="18"
-                  textAnchor="middle"
-                >
-                  {avatar.emoji}
-                </text>
-
-                {/* Status indicator */}
-                <circle
-                  cx={pos.x + 14}
-                  cy={pos.y - 14}
-                  r="6"
-                  fill={statusColor}
-                  stroke="#1e293b"
-                  strokeWidth="2"
-                />
-
-                {/* Agent name */}
-                <text
-                  x={pos.x}
-                  y={pos.y + 38}
-                  fill="#94a3b8"
-                  fontSize="9"
-                  textAnchor="middle"
-                  fontWeight="bold"
-                >
-                  {agent.id}
-                </text>
-              </g>
+                name={agent.id}
+                isWorking={agent.status === 'working'}
+              />
             )
           })}
-
-          {/* Connecting paths (hallways) */}
-          <path
-            d="M 190 70 L 200 70"
-            stroke="#334155"
-            strokeWidth="3"
-            strokeDasharray="5,5"
-          />
-          <path
-            d="M 350 70 L 360 70"
-            stroke="#334155"
-            strokeWidth="3"
-            strokeDasharray="5,5"
-          />
-          <path
-            d="M 100 130 L 100 140"
-            stroke="#334155"
-            strokeWidth="3"
-            strokeDasharray="5,5"
-          />
         </svg>
 
-        {/* Agent Info Panel */}
+        {/* Agent detail panel */}
         {selectedAgent && (
-          <div className="absolute top-4 right-4 bg-slate-800 border border-cyan-500 rounded-lg p-4 w-64 shadow-lg">
+          <div className="absolute top-4 right-4 bg-slate-800/95 border border-cyan-500 rounded-lg p-4 w-56 shadow-xl backdrop-blur">
             <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <span className="text-2xl">
-                  {AGENT_AVATARS[selectedAgent.id]?.emoji || '🤖'}
-                </span>
-                <div>
-                  <div className="font-bold text-white">{selectedAgent.name}</div>
-                  <div className="text-xs text-gray-400">{selectedAgent.id}</div>
-                </div>
+              <div>
+                <div className="font-bold text-white">{selectedAgent.name}</div>
+                <div className="text-xs text-cyan-400">{selectedAgent.id}</div>
               </div>
-              <button
-                onClick={() => setSelectedAgent(null)}
-                className="text-gray-400 hover:text-white"
-              >
-                ✕
-              </button>
+              <button onClick={() => setSelectedAgent(null)} className="text-gray-400 hover:text-white text-lg">×</button>
             </div>
-
             <div className="space-y-2 text-sm">
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between">
                 <span className="text-gray-400">Role</span>
                 <span className="text-white">{selectedAgent.role}</span>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex justify-between">
                 <span className="text-gray-400">Status</span>
-                <span
-                  className="px-2 py-0.5 rounded text-xs"
-                  style={{ backgroundColor: getStatusColor(selectedAgent.status) + '33', color: getStatusColor(selectedAgent.status) }}
-                >
-                  {selectedAgent.status}
-                </span>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  selectedAgent.status === 'working' ? 'bg-green-500/20 text-green-400' :
+                  selectedAgent.status === 'idle' ? 'bg-gray-500/20 text-gray-400' :
+                  'bg-yellow-500/20 text-yellow-400'
+                }`}>{selectedAgent.status}</span>
               </div>
               {selectedAgent.current_task && (
-                <div className="mt-2 pt-2 border-t border-slate-700">
-                  <div className="text-gray-400 text-xs mb-1">Current Task</div>
-                  <div className="text-white text-xs">{selectedAgent.current_task}</div>
+                <div className="pt-2 border-t border-slate-700">
+                  <div className="text-gray-400 text-xs">Current Task</div>
+                  <div className="text-white text-xs mt-1">{selectedAgent.current_task}</div>
                 </div>
               )}
             </div>
           </div>
         )}
       </div>
-
-      {/* Room hover info */}
-      {hoveredRoom && (
-        <div className="mt-2 text-sm text-gray-400">
-          {ROOMS.find(r => r.id === hoveredRoom)?.name} - {' '}
-          {ROOMS.find(r => r.id === hoveredRoom)?.agents.length || 0} agents
-        </div>
-      )}
     </div>
   )
 }
