@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import CEOInbox from './components/CEOInbox'
 import GoalDashboard from './components/GoalDashboard'
+import SalesPipeline from './components/SalesPipeline'
 
 interface Agent {
   id: string
@@ -19,7 +20,7 @@ function App() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [kpi, setKPI] = useState<KPI | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals'>('goals')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals' | 'pipeline'>('pipeline')
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -89,6 +90,16 @@ function App() {
               🎯 Goals
             </button>
             <button
+              onClick={() => setActiveTab('pipeline')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                activeTab === 'pipeline'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              💰 Pipeline
+            </button>
+            <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 activeTab === 'dashboard'
@@ -139,6 +150,8 @@ function App() {
               <CEOInbox apiUrl={API_URL} />
             ) : activeTab === 'goals' ? (
               <GoalDashboard apiUrl={API_URL} />
+            ) : activeTab === 'pipeline' ? (
+              <SalesPipeline apiUrl={API_URL} />
             ) : (
               <>
                 {/* Agent Grid */}
