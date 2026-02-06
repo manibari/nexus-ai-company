@@ -1,7 +1,12 @@
 # ADR-010: Goal-Driven Execution (目標導向執行)
 
 ## 狀態
-已採納
+已採納（已實作）
+
+## 時間單位
+**重要：所有時間以「分鐘」為單位**
+
+AI Agent 的執行速度以分鐘計算，不是以天或小時計算。這是與傳統專案管理的關鍵差異。
 
 ## 背景
 CEO 提出關鍵需求：
@@ -53,11 +58,11 @@ goal:
       - "自動交易"
       - "手機 App"
 
-  # === 時間 ===
-  timeline:
-    created_at: "2024-02-06"
-    deadline: "2024-02-13"  # 7 天後
-    buffer_days: 2          # 緩衝時間
+  # === 時間（以分鐘計算）===
+  time_estimate:
+    estimated_minutes: 90    # 預估 90 分鐘
+    buffer_minutes: 20       # 緩衝 20 分鐘
+    # deadline 會在開始執行時自動計算
 
   # === 優先級 ===
   priority: "high"  # critical, high, medium, low
@@ -92,11 +97,10 @@ phases:
       - "資料正確存入資料庫"
       - "有重試機制"
 
-    # 時間
-    timeline:
-      start: "2024-02-06"
-      end: "2024-02-08"    # 2 天
-      estimated_hours: 6
+    # 時間（以分鐘計算）
+    time_estimate:
+      estimated_minutes: 30   # 預估 30 分鐘
+      buffer_minutes: 5       # 緩衝 5 分鐘
 
     # 狀態
     status: "pending"  # pending, in_progress, review, completed, blocked
@@ -119,10 +123,9 @@ phases:
       - "突破月線"
       - "量增 2 倍"
 
-    timeline:
-      start: "2024-02-08"
-      end: "2024-02-10"    # 2 天
-      estimated_hours: 4
+    time_estimate:
+      estimated_minutes: 20   # 預估 20 分鐘
+      buffer_minutes: 5
 
     status: "pending"
     depends_on: ["PHASE-001"]
@@ -174,14 +177,14 @@ checkpoint:
     approved_by: null
 ```
 
-### 4. 時間管理
+### 4. 時間管理（分鐘為單位）
 
 ```yaml
 time_management:
   # === 預警機制 ===
   alerts:
     - type: "approaching_deadline"
-      trigger: "2 days before deadline"
+      trigger: "10 minutes before deadline"
       action: "notify_owner"
 
     - type: "overdue"
@@ -189,21 +192,20 @@ time_management:
       action: "escalate_to_ceo"
 
     - type: "phase_delayed"
-      trigger: "phase end date passed"
+      trigger: "phase deadline passed"
       action: "notify_and_replan"
 
-  # === 時間追蹤 ===
+  # === 時間追蹤（分鐘）===
   tracking:
-    estimated_hours: 12
-    actual_hours: 0
-    remaining_hours: 12
+    estimated_minutes: 90
+    actual_minutes: 0
+    remaining_minutes: 90
+    buffer_minutes: 20
 
-    # 每日更新
-    daily_log:
-      - date: "2024-02-06"
-        hours_spent: 3
-        progress: "完成爬蟲框架"
-        blockers: []
+    # 自動計算
+    elapsed_minutes: 0           # 已經過時間
+    completion_percentage: 0.0   # 完成百分比
+    is_over_estimate: false      # 是否超時
 ```
 
 ## 架構整合
@@ -247,7 +249,7 @@ class OrchestratorAgent:
         將目標拆解為階段
 
         規則：
-        - 每個 Phase 不超過 3 天
+        - 每個 Phase 不超過 60 分鐘
         - 每個 Phase 有明確交付物
         - Phase 之間有清楚的依賴關係
         """
@@ -284,26 +286,25 @@ class OrchestratorAgent:
 ├─────────────────────────────────────────────────────────────────┤
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ GOAL-001: 股票爬蟲系統                                   │   │
-│  │ Deadline: 2024-02-13 (剩餘 5 天)                         │   │
+│  │ 時間：預估 90 min / 已用 35 min / 剩餘 55 min            │   │
 │  │                                                         │   │
 │  │ Progress: ████████░░░░░░░░ 50%                          │   │
 │  │                                                         │   │
 │  │ Phases:                                                 │   │
-│  │ ✅ Phase 1: 資料爬取 (completed)                        │   │
-│  │ 🔄 Phase 2: 分析邏輯 (in_progress) ← 目前               │   │
-│  │ ⏳ Phase 3: 通知整合 (pending)                          │   │
-│  │ ⏳ Phase 4: 測試部署 (pending)                          │   │
+│  │ ✅ Phase 1: 資料爬取 (30min - completed)                │   │
+│  │ 🔄 Phase 2: 分析邏輯 (20min - in_progress) ← 目前       │   │
+│  │ ⏳ Phase 3: 通知整合 (15min - pending)                  │   │
+│  │ ⏳ Phase 4: 測試部署 (25min - pending)                  │   │
 │  │                                                         │   │
-│  │ 時間：預估 12h / 已用 5h / 剩餘 7h                       │   │
 │  │ 狀態：🟢 On Track                                       │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                 │
 │  ┌─────────────────────────────────────────────────────────┐   │
 │  │ GOAL-002: ABC Corp 提案                                  │   │
-│  │ Deadline: 2024-02-10 (剩餘 2 天) ⚠️                      │   │
+│  │ 時間：預估 60 min / 剩餘 10 min ⚠️                       │   │
 │  │                                                         │   │
 │  │ Progress: ██████░░░░░░░░░░ 40%                          │   │
-│  │ 狀態：🟡 At Risk - Phase 2 延遲 1 天                     │   │
+│  │ 狀態：🟡 At Risk - Phase 2 接近超時                      │   │
 │  └─────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -324,9 +325,9 @@ class Goal:
     in_scope: List[str]
     out_of_scope: List[str]
 
-    # 時間
-    deadline: datetime
-    buffer_days: int
+    # 時間（分鐘為單位）
+    time_estimate: TimeEstimate  # estimated_minutes, buffer_minutes
+    deadline: datetime  # 開始時自動計算
 
     # 狀態
     status: GoalStatus  # draft, active, completed, cancelled
@@ -349,11 +350,11 @@ class Phase:
     deliverables: List[str]
     acceptance_criteria: List[str]
 
-    # 時間
-    start_date: datetime
-    end_date: datetime
-    estimated_hours: float
-    actual_hours: float
+    # 時間（分鐘為單位）
+    time_estimate: TimeEstimate  # estimated_minutes, actual_minutes, buffer_minutes
+    started_at: datetime
+    completed_at: datetime
+    deadline: datetime  # 開始時自動計算
 
     # 狀態
     status: PhaseStatus  # pending, in_progress, review, completed, blocked
@@ -423,24 +424,24 @@ GET    /api/v1/goals/{id}/progress      # 取得進度報告
 POST   /api/v1/phases/{id}/log          # 記錄工作日誌
 ```
 
-## 實作優先順序
+## 實作狀態
 
-### Phase 1: 核心模型（3 天）
-- [ ] Goal, Phase, Checkpoint 資料模型
-- [ ] 資料庫 Schema
-- [ ] 基礎 CRUD API
+### Phase 1: 核心模型 ✅ 已完成
+- [x] Goal, Phase, Checkpoint 資料模型 (`app/goals/models.py`)
+- [x] In-memory Repository (`app/goals/repository.py`)
+- [x] 基礎 CRUD API (`app/api/goals.py`)
 
-### Phase 2: ORCHESTRATOR 整合（3 天）
+### Phase 2: ORCHESTRATOR 整合（待實作）
 - [ ] Goal decomposition 邏輯
 - [ ] Phase planning 邏輯
 - [ ] Progress tracking
 
-### Phase 3: 時間管理（2 天）
+### Phase 3: 時間管理（待實作）
 - [ ] Deadline 預警
 - [ ] 超時處理
 - [ ] 進度報告
 
-### Phase 4: CEO Dashboard（2 天）
+### Phase 4: CEO Dashboard（待實作）
 - [ ] Goal 列表視圖
 - [ ] Phase 進度視圖
 - [ ] Checkpoint 審批介面
