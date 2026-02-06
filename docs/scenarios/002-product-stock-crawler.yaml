@@ -1,0 +1,298 @@
+# ===========================================
+# Scenario 002: Product Development - 股票爬蟲分析系統
+# ===========================================
+# 用途：驗證 Product Pipeline 流程
+# 路徑：CEO Input → GATEKEEPER → ORCHESTRATOR → BUILDER → INSPECTOR
+#
+# 這個場景測試：當 CEO 提出一個產品需求，AI 公司如何
+# 從需求分析、設計、開發到測試完成整個流程
+
+scenario:
+  id: "SCENARIO-002"
+  name: "Stock Crawler Analysis System"
+  description: "CEO 要求開發一個股票爬蟲分析系統，驗證 Product Pipeline"
+  pipeline: "product"  # sales | product
+  agents_involved:
+    - GATEKEEPER   # 接收需求
+    - ORCHESTRATOR # 需求分析、任務拆解
+    - BUILDER      # 開發實作
+    - INSPECTOR    # 測試驗證
+    - LEDGER       # 成本估算
+  engines_involved:
+    - NLP Engine (需求理解)
+    - Code Analysis Engine (代碼品質)
+    - Search Engine (技術方案搜尋)
+
+# -----------------------------
+# 專案需求
+# -----------------------------
+project:
+  name: "股票爬蟲分析系統"
+  type: "internal_tool"  # internal_tool | client_project | product
+
+  # CEO 原始需求（可能不完整、不具體）
+  ceo_requirements:
+    raw_text: |
+      我想要一個系統可以：
+      1. 每天自動爬取台股資料
+      2. 分析哪些股票值得關注
+      3. 早上 9 點前發通知給我
+
+      先做簡單版就好，之後再慢慢加功能。
+
+    attachments: []
+    priority: "medium"
+    deadline: "2 週內可用"
+
+# -----------------------------
+# Pipeline 階段測試
+# -----------------------------
+stages:
+
+  # === P1: 需求確認 ===
+  P1_requirements:
+    agent: "GATEKEEPER"
+
+    input:
+      raw_text: "${project.ceo_requirements.raw_text}"
+
+    expected_output:
+      intent: "project"
+      parsed_requirements:
+        - "每日爬取台股資料"
+        - "股票分析/篩選"
+        - "通知推送 (9AM)"
+
+      clarification_questions:
+        - "要爬取哪些資料？(股價/成交量/籌碼/新聞)"
+        - "分析的標準是什麼？(技術指標/基本面/自訂條件)"
+        - "通知要發到哪裡？(LINE/Email/App)"
+        - "要追蹤多少支股票？(全市場/自選清單)"
+
+      ambiguities_identified:
+        - "『值得關注』的定義不明確"
+        - "『簡單版』的範圍不明確"
+
+    success_criteria:
+      - "正確識別為 project 類型"
+      - "提出至少 3 個釐清問題"
+      - "識別出需求模糊處"
+
+  # === P2: 需求分析 & 設計 ===
+  P2_analysis:
+    agent: "ORCHESTRATOR"
+
+    # 假設 CEO 回答了釐清問題
+    input:
+      clarified_requirements:
+        data_sources:
+          - "台股每日收盤價"
+          - "成交量"
+          - "三大法人買賣超"
+        analysis_criteria:
+          - "連續 3 天法人買超"
+          - "股價突破月線"
+          - "成交量放大 2 倍以上"
+        notification:
+          channel: "LINE"
+          time: "08:30"
+        scope:
+          - "上市股票"
+          - "排除股價 < 10 元"
+
+    expected_output:
+      # 系統架構設計
+      architecture:
+        components:
+          - name: "Data Crawler"
+            description: "每日爬取台股資料"
+            data_sources: ["TWSE", "Yahoo Finance"]
+          - name: "Analysis Engine"
+            description: "套用篩選條件"
+          - name: "Notification Service"
+            description: "LINE 推播"
+          - name: "Scheduler"
+            description: "排程管理"
+
+      # 任務拆解
+      tasks:
+        - id: "T001"
+          title: "建立資料爬蟲"
+          description: "爬取 TWSE 每日收盤資料"
+          estimated_hours: 4
+          assigned_to: "BUILDER"
+          dependencies: []
+
+        - id: "T002"
+          title: "建立分析模組"
+          description: "實作三個篩選條件"
+          estimated_hours: 3
+          assigned_to: "BUILDER"
+          dependencies: ["T001"]
+
+        - id: "T003"
+          title: "LINE 通知整合"
+          description: "串接 LINE Notify API"
+          estimated_hours: 2
+          assigned_to: "BUILDER"
+          dependencies: []
+
+        - id: "T004"
+          title: "排程設定"
+          description: "設定每日 8:00 執行"
+          estimated_hours: 1
+          assigned_to: "BUILDER"
+          dependencies: ["T001", "T002", "T003"]
+
+        - id: "T005"
+          title: "整合測試"
+          description: "端到端測試"
+          estimated_hours: 2
+          assigned_to: "INSPECTOR"
+          dependencies: ["T004"]
+
+      # 成本估算
+      estimate:
+        total_hours: 12
+        timeline: "3-4 工作天"
+        risks:
+          - "TWSE 可能有爬蟲限制"
+          - "LINE Notify 有每日發送上限"
+
+    success_criteria:
+      - "產出清晰的架構設計"
+      - "任務拆解合理（單一任務 < 8 小時）"
+      - "識別出技術風險"
+
+  # === P3-P4: 開發實作 ===
+  P3_P4_development:
+    agent: "BUILDER"
+
+    # 測試 BUILDER 是否正確執行任務
+    test_cases:
+      - task_id: "T001"
+        input:
+          task_description: "爬取 TWSE 每日收盤資料"
+
+        expected_behavior:
+          - "搜尋 TWSE API 或爬蟲方案"
+          - "選擇適當技術（Python requests/selenium）"
+          - "實作爬蟲代碼"
+          - "處理錯誤情況（網站異常、資料格式變更）"
+          - "儲存資料（CSV/SQLite/PostgreSQL）"
+
+        expected_output:
+          files_created:
+            - "crawler/twse_crawler.py"
+            - "crawler/data_storage.py"
+          tests_written: true
+          documentation: true
+
+        quality_checks:
+          - "有錯誤處理"
+          - "有重試機制"
+          - "有日誌記錄"
+          - "符合 PEP8"
+
+      - task_id: "T002"
+        input:
+          task_description: "實作三個篩選條件"
+
+        expected_behavior:
+          - "讀取歷史資料"
+          - "實作『連續 3 天法人買超』條件"
+          - "實作『股價突破月線』條件"
+          - "實作『成交量放大 2 倍』條件"
+          - "可組合多個條件"
+
+        expected_output:
+          files_created:
+            - "analysis/filters.py"
+            - "analysis/screener.py"
+
+        quality_checks:
+          - "條件可配置"
+          - "有單元測試"
+          - "效能可接受（< 5 秒處理全市場）"
+
+  # === P5: 測試驗證 ===
+  P5_testing:
+    agent: "INSPECTOR"
+
+    test_plan:
+      unit_tests:
+        - "爬蟲能正確解析 TWSE 資料"
+        - "篩選條件邏輯正確"
+        - "LINE 通知能成功發送"
+
+      integration_tests:
+        - "完整流程：爬取 → 分析 → 通知"
+        - "排程正確觸發"
+
+      edge_cases:
+        - "假日不執行"
+        - "資料來源異常時的處理"
+        - "沒有符合條件的股票時"
+
+    expected_output:
+      test_coverage_min: 0.8
+      all_tests_pass: true
+      bugs_found: []
+
+    success_criteria:
+      - "測試覆蓋率 > 80%"
+      - "所有測試通過"
+      - "有完整測試報告"
+
+  # === P6: 部署交付 ===
+  P6_deployment:
+    agent: "BUILDER"  # 或 DevOps Agent
+
+    expected_output:
+      deployment:
+        environment: "production"
+        method: "Docker + Cron"
+        monitoring: true
+
+      documentation:
+        - "README.md"
+        - "設定說明"
+        - "維護指南"
+
+      handover:
+        demo_completed: true
+        ceo_approved: true
+
+# -----------------------------
+# 驗證指標
+# -----------------------------
+validation:
+  # Pipeline 效率
+  total_time_target: "4 working days"
+
+  # 各階段時間分配
+  time_breakdown:
+    P1_requirements: "< 1 hour"
+    P2_analysis: "< 2 hours"
+    P3_P4_development: "< 2 days"
+    P5_testing: "< 1 day"
+    P6_deployment: "< 0.5 day"
+
+  # 品質指標
+  quality:
+    code_coverage_min: 0.8
+    bugs_in_production_max: 0
+    documentation_complete: true
+
+  # CEO 滿意度（人工評分 1-5）
+  ceo_satisfaction_target: 4.0
+
+# -----------------------------
+# 執行記錄
+# -----------------------------
+execution_log:
+  - date: null
+    version: null
+    stage_reached: null
+    blockers: null
+    notes: null

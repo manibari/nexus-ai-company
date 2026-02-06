@@ -1,0 +1,219 @@
+# ===========================================
+# Scenario 001: Sales Opportunity 驗證
+# ===========================================
+# 用途：驗證 Sales Pipeline + MEDDIC Engine 流程
+# 路徑：CEO Input → GATEKEEPER → HUNTER → MEDDIC Analysis → Actions
+
+scenario:
+  id: "SCENARIO-001"
+  name: "Sales Opportunity Flow"
+  description: "驗證從 CEO 輸入商機到 HUNTER 跟進的完整流程"
+  pipeline: "sales"  # sales | product
+  agents_involved:
+    - GATEKEEPER
+    - HUNTER
+  engines_involved:
+    - NLP Engine (意圖識別)
+    - Enrichment Engine (公司資料補全)
+    - MEDDIC Engine (商機分析)
+
+# -----------------------------
+# 測試案例
+# -----------------------------
+cases:
+  # --- Case 1: 熱線索 (應該優先跟進) ---
+  - id: "CASE-001-A"
+    name: "熱線索 - 朋友介紹的 CTO"
+    tags: ["hot_lead", "referral", "has_champion"]
+
+    # CEO 原始輸入
+    input:
+      raw_text: |
+        今天跟老王吃飯，他介紹了 ABC Corp 的 CTO 張三，
+        他們最近在評估新的解決方案，說現有系統太慢影響業務。
+        張三說下週可以安排個會議聊聊。
+      input_type: "text"
+      source: "ceo_referral"
+      attachments: []
+
+    # 預期系統解析結果
+    expected_parsing:
+      intent: "opportunity"
+      intent_confidence_min: 0.8
+      entities:
+        - type: "company"
+          value: "ABC Corp"
+        - type: "person"
+          value: "張三"
+          role: "CTO"
+        - type: "referrer"
+          value: "老王"
+
+    # 預期 MEDDIC 分析
+    expected_meddic:
+      pain:
+        identified: true
+        description: "現有系統太慢影響業務"
+        intensity_min: 6  # 有明確業務影響
+        is_quantified: false
+      champion:
+        identified: true
+        name: "張三"
+        title: "CTO"
+        strength: "medium"  # 願意見面，但還沒看到主動推動
+      economic_buyer:
+        identified: false
+        access_level: "unknown"
+      decision_criteria:
+        identified: false
+      decision_process:
+        identified: false
+      metrics:
+        identified: false
+
+    # 預期系統建議動作
+    expected_actions:
+      primary: "schedule_meeting"
+      secondary:
+        - "research_company"
+        - "prepare_discovery_questions"
+      priority: "high"
+      reasoning: "有明確痛點 + Champion 願意見面 = 優先跟進"
+
+    # 實際業務結果（事後填寫）
+    actual_outcome:
+      status: null  # won | lost | ongoing | nurture
+      close_date: null
+      deal_value: null
+      loss_reason: null
+      notes: ""
+
+  # --- Case 2: 冷線索 (資訊不足) ---
+  - id: "CASE-001-B"
+    name: "冷線索 - 只有公司名"
+    tags: ["cold_lead", "low_info"]
+
+    input:
+      raw_text: "幫我看一下 XYZ 科技這家公司"
+      input_type: "text"
+      source: "ceo_direct"
+      attachments: []
+
+    expected_parsing:
+      intent: "opportunity"  # 或可能是 "question"
+      intent_confidence_min: 0.5  # 信心度應該較低
+      entities:
+        - type: "company"
+          value: "XYZ 科技"
+
+    expected_meddic:
+      pain:
+        identified: false
+      champion:
+        identified: false
+      economic_buyer:
+        identified: false
+        access_level: "unknown"
+
+    expected_actions:
+      primary: "request_more_info"  # 應該要求 CEO 補充資訊
+      secondary:
+        - "research_company"
+      priority: "low"
+      reasoning: "資訊不足，無法判斷商機品質"
+
+    actual_outcome:
+      status: null
+      notes: ""
+
+  # --- Case 3: 有預算訊號 ---
+  - id: "CASE-001-C"
+    name: "明確預算 - Email 轉發"
+    tags: ["has_budget", "email", "urgent"]
+
+    input:
+      raw_text: |
+        --- Forwarded Email ---
+        From: lisa@bigcorp.com
+        Subject: RE: 解決方案詢價
+
+        Hi,
+
+        我們 Q2 有一筆 50 萬的預算要用在系統升級，
+        你們的方案看起來不錯，能不能下週來簡報一下？
+
+        Lisa Chen
+        VP of Operations
+        BigCorp International
+      input_type: "email"
+      source: "ceo_forward"
+      attachments: []
+
+    expected_parsing:
+      intent: "opportunity"
+      intent_confidence_min: 0.9
+      entities:
+        - type: "company"
+          value: "BigCorp International"
+        - type: "person"
+          value: "Lisa Chen"
+          role: "VP of Operations"
+        - type: "email"
+          value: "lisa@bigcorp.com"
+        - type: "budget"
+          value: "500000"
+          currency: "TWD"
+        - type: "timeline"
+          value: "Q2"
+
+    expected_meddic:
+      pain:
+        identified: true
+        description: "系統升級需求"
+        intensity_min: 5
+      champion:
+        identified: true
+        name: "Lisa Chen"
+        title: "VP of Operations"
+        strength: "strong"  # 主動聯繫 + VP 級別
+      economic_buyer:
+        identified: false  # VP 可能不是最終決策者
+        access_level: "unknown"
+        note: "VP of Ops 可能有預算權，需要確認"
+      metrics:
+        identified: true
+        value: "50萬預算"
+
+    expected_actions:
+      primary: "schedule_presentation"
+      secondary:
+        - "prepare_proposal"
+        - "research_bigcorp"
+      priority: "urgent"
+      reasoning: "有預算 + 有時程 + VP 主動聯繫 = 最高優先"
+
+    actual_outcome:
+      status: null
+      notes: ""
+
+# -----------------------------
+# 驗證規則
+# -----------------------------
+validation:
+  # 意圖識別準確率目標
+  intent_accuracy_target: 0.85
+
+  # MEDDIC 分析準確率目標（與人工判斷比對）
+  meddic_accuracy_target: 0.75
+
+  # 動作建議合理性（人工評分 1-5）
+  action_relevance_target: 4.0
+
+# -----------------------------
+# 執行記錄
+# -----------------------------
+execution_log:
+  - date: null
+    version: null
+    results: null
+    notes: null
