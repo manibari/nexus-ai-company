@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import CEOInbox from './components/CEOInbox'
+import GoalDashboard from './components/GoalDashboard'
 
 interface Agent {
   id: string
@@ -18,7 +19,7 @@ function App() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [kpi, setKPI] = useState<KPI | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox'>('inbox')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals'>('goals')
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -78,6 +79,16 @@ function App() {
               📥 CEO Inbox
             </button>
             <button
+              onClick={() => setActiveTab('goals')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                activeTab === 'goals'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              🎯 Goals
+            </button>
+            <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-2 rounded-lg transition-colors ${
                 activeTab === 'dashboard'
@@ -126,6 +137,8 @@ function App() {
           <div className="col-span-2">
             {activeTab === 'inbox' ? (
               <CEOInbox apiUrl={API_URL} />
+            ) : activeTab === 'goals' ? (
+              <GoalDashboard apiUrl={API_URL} />
             ) : (
               <>
                 {/* Agent Grid */}
