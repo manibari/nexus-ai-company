@@ -128,6 +128,53 @@ class PipelineRepository:
             return opp
         return None
 
+    async def mark_dormant(
+        self,
+        opp_id: str,
+        reason: Optional[str] = None
+    ) -> Optional[Opportunity]:
+        """標記休眠"""
+        opp = await self.get_opportunity(opp_id)
+        if opp:
+            opp.stage = OpportunityStage.DORMANT
+            opp.status = OpportunityStatus.DORMANT
+            opp.lost_reason = reason  # 重複使用 lost_reason 存放休眠原因
+            await self.update_opportunity(opp)
+            return opp
+        return None
+
+    async def reactivate(self, opp_id: str) -> Optional[Opportunity]:
+        """重新啟動休眠商機"""
+        opp = await self.get_opportunity(opp_id)
+        if opp and opp.status == OpportunityStatus.DORMANT:
+            opp.stage = OpportunityStage.LEAD
+            opp.status = OpportunityStatus.OPEN
+            opp.stage_entered_at = datetime.utcnow()
+            opp.lost_reason = None
+            await self.update_opportunity(opp)
+            return opp
+        return None
+
+    async def list_closed_opportunities(
+        self,
+        status: Optional[OpportunityStatus] = None,
+        limit: int = 100,
+    ) -> List[Opportunity]:
+        """列出已關閉的商機 (Won/Lost/Dormant)"""
+        results = list(self._opportunities.values())
+
+        # 篩選已關閉的
+        closed_statuses = [OpportunityStatus.WON, OpportunityStatus.LOST, OpportunityStatus.DORMANT]
+        results = [o for o in results if o.status in closed_statuses]
+
+        if status:
+            results = [o for o in results if o.status == status]
+
+        # 按更新時間排序
+        results.sort(key=lambda o: o.stage_entered_at, reverse=True)
+
+        return results[:limit]
+
     # === Contact Operations ===
 
     async def add_contact(

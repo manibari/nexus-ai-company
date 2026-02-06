@@ -100,6 +100,11 @@ class LostRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class DormantRequest(BaseModel):
+    """標記休眠"""
+    reason: Optional[str] = None
+
+
 # === Opportunity Endpoints ===
 
 @router.post("/opportunities", response_model=Dict[str, Any])
@@ -279,6 +284,64 @@ async def mark_lost(opp_id: str, request: LostRequest):
     if not result:
         raise HTTPException(status_code=404, detail="Opportunity not found")
     return result.to_dict()
+
+
+@router.post("/opportunities/{opp_id}/dormant", response_model=Dict[str, Any])
+async def mark_dormant(opp_id: str, request: DormantRequest):
+    """標記休眠"""
+    result = await _repo.mark_dormant(opp_id, request.reason)
+    if not result:
+        raise HTTPException(status_code=404, detail="Opportunity not found")
+    return result.to_dict()
+
+
+@router.post("/opportunities/{opp_id}/reactivate", response_model=Dict[str, Any])
+async def reactivate_opportunity(opp_id: str):
+    """重新啟動休眠商機"""
+    result = await _repo.reactivate(opp_id)
+    if not result:
+        raise HTTPException(status_code=400, detail="Cannot reactivate: opportunity not found or not dormant")
+    return result.to_dict()
+
+
+# === Closed Deals Endpoints ===
+
+@router.get("/closed", response_model=List[Dict[str, Any]])
+async def list_closed_deals(
+    status: Optional[str] = None,
+    limit: int = 100,
+):
+    """列出已關閉的商機 (Won/Lost/Dormant)"""
+    status_enum = None
+    if status:
+        try:
+            status_enum = OpportunityStatus(status)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid status: {status}")
+
+    opps = await _repo.list_closed_opportunities(status=status_enum, limit=limit)
+    return [o.to_summary() for o in opps]
+
+
+@router.get("/closed/won", response_model=List[Dict[str, Any]])
+async def list_won_deals(limit: int = 100):
+    """列出成交商機"""
+    opps = await _repo.list_closed_opportunities(status=OpportunityStatus.WON, limit=limit)
+    return [o.to_summary() for o in opps]
+
+
+@router.get("/closed/lost", response_model=List[Dict[str, Any]])
+async def list_lost_deals(limit: int = 100):
+    """列出失敗商機"""
+    opps = await _repo.list_closed_opportunities(status=OpportunityStatus.LOST, limit=limit)
+    return [o.to_summary() for o in opps]
+
+
+@router.get("/closed/dormant", response_model=List[Dict[str, Any]])
+async def list_dormant_deals(limit: int = 100):
+    """列出休眠商機"""
+    opps = await _repo.list_closed_opportunities(status=OpportunityStatus.DORMANT, limit=limit)
+    return [o.to_summary() for o in opps]
 
 
 # === Contact Endpoints ===

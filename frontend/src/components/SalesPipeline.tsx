@@ -103,6 +103,13 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Closed Deals state
+  const [view, setView] = useState<'pipeline' | 'closed'>('pipeline')
+  const [wonDeals, setWonDeals] = useState<OpportunitySummary[]>([])
+  const [lostDeals, setLostDeals] = useState<OpportunitySummary[]>([])
+  const [dormantDeals, setDormantDeals] = useState<OpportunitySummary[]>([])
+  const [closedLoading, setClosedLoading] = useState(false)
+
   // Create form state
   const [newOpp, setNewOpp] = useState({
     name: '',
@@ -143,11 +150,69 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
     }
   }
 
+  const fetchClosedDeals = async () => {
+    setClosedLoading(true)
+    try {
+      const [wonRes, lostRes, dormantRes] = await Promise.all([
+        fetch(`${apiUrl}/api/v1/pipeline/closed/won`),
+        fetch(`${apiUrl}/api/v1/pipeline/closed/lost`),
+        fetch(`${apiUrl}/api/v1/pipeline/closed/dormant`),
+      ])
+
+      if (wonRes.ok) setWonDeals(await wonRes.json())
+      if (lostRes.ok) setLostDeals(await lostRes.json())
+      if (dormantRes.ok) setDormantDeals(await dormantRes.json())
+    } catch (err) {
+      setError('Failed to fetch closed deals')
+    } finally {
+      setClosedLoading(false)
+    }
+  }
+
+  const reactivateOpportunity = async (oppId: string) => {
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/pipeline/opportunities/${oppId}/reactivate`, {
+        method: 'POST',
+      })
+
+      if (response.ok) {
+        await fetchClosedDeals()
+        await fetchData()
+      } else {
+        const error = await response.json()
+        setError(error.detail || 'Failed to reactivate opportunity')
+      }
+    } catch (err) {
+      setError('Failed to reactivate opportunity')
+    }
+  }
+
+  const markDormant = async (oppId: string) => {
+    const reason = prompt('休眠原因？')
+    try {
+      await fetch(`${apiUrl}/api/v1/pipeline/opportunities/${oppId}/dormant`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      await fetchData()
+      setSelectedOpp(null)
+    } catch (err) {
+      setError('Failed to mark as dormant')
+    }
+  }
+
   useEffect(() => {
     fetchData()
     const interval = setInterval(fetchData, 60000)
     return () => clearInterval(interval)
   }, [])
+
+  useEffect(() => {
+    if (view === 'closed') {
+      fetchClosedDeals()
+    }
+  }, [view])
 
   const createOpportunity = async () => {
     try {
@@ -262,24 +327,50 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
     <div className="space-y-6">
       {/* Header */}
       <div className="bg-slate-800 rounded-lg p-6">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-bold text-cyan-300 flex items-center gap-2">
-            💰 Sales Pipeline
+            💰 Sales Board
           </h2>
           <div className="flex gap-2">
             <button
-              onClick={fetchData}
+              onClick={view === 'pipeline' ? fetchData : fetchClosedDeals}
               className="px-3 py-1 bg-slate-700 hover:bg-slate-600 rounded text-sm transition-colors"
             >
               🔄 重新整理
             </button>
-            <button
-              onClick={() => setShowCreateForm(true)}
-              className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm transition-colors"
-            >
-              + 新增商機
-            </button>
+            {view === 'pipeline' && (
+              <button
+                onClick={() => setShowCreateForm(true)}
+                className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm transition-colors"
+              >
+                + 新增商機
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* View Tabs */}
+        <div className="flex gap-2 mb-6">
+          <button
+            onClick={() => setView('pipeline')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              view === 'pipeline'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            📊 Active Pipeline
+          </button>
+          <button
+            onClick={() => setView('closed')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              view === 'closed'
+                ? 'bg-cyan-600 text-white'
+                : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+            }`}
+          >
+            📁 Closed Deals
+          </button>
         </div>
 
         {error && (
@@ -289,8 +380,94 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
           </div>
         )}
 
-        {/* Pipeline Overview */}
-        {dashboard && (
+        {/* === CLOSED DEALS VIEW === */}
+        {view === 'closed' && (
+          closedLoading ? (
+            <div className="text-center text-gray-400 py-8">載入中...</div>
+          ) : (
+            <div className="space-y-6">
+              {/* Won Deals */}
+              <div>
+                <h3 className="text-lg font-medium text-green-400 mb-3 flex items-center gap-2">
+                  🏆 Won <span className="text-sm text-gray-400">({wonDeals.length})</span>
+                </h3>
+                {wonDeals.length === 0 ? (
+                  <div className="text-center text-gray-500 py-4 bg-slate-700/50 rounded-lg">
+                    目前沒有成交商機
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {wonDeals.map((deal) => (
+                      <div key={deal.id} className="p-4 bg-green-900/20 border border-green-600/30 rounded-lg">
+                        <div className="font-medium text-green-300">{deal.name}</div>
+                        <div className="text-sm text-gray-400">{deal.company}</div>
+                        <div className="text-lg font-bold text-green-400 mt-2">{formatAmount(deal.amount)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Lost Deals */}
+              <div>
+                <h3 className="text-lg font-medium text-red-400 mb-3 flex items-center gap-2">
+                  ❌ Lost <span className="text-sm text-gray-400">({lostDeals.length})</span>
+                </h3>
+                {lostDeals.length === 0 ? (
+                  <div className="text-center text-gray-500 py-4 bg-slate-700/50 rounded-lg">
+                    目前沒有失敗商機
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {lostDeals.map((deal) => (
+                      <div key={deal.id} className="p-4 bg-red-900/20 border border-red-600/30 rounded-lg">
+                        <div className="font-medium text-red-300">{deal.name}</div>
+                        <div className="text-sm text-gray-400">{deal.company}</div>
+                        <div className="text-lg font-bold text-red-400 mt-2">{formatAmount(deal.amount)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Dormant Deals */}
+              <div>
+                <h3 className="text-lg font-medium text-yellow-400 mb-3 flex items-center gap-2">
+                  💤 Dormant <span className="text-sm text-gray-400">({dormantDeals.length})</span>
+                </h3>
+                {dormantDeals.length === 0 ? (
+                  <div className="text-center text-gray-500 py-4 bg-slate-700/50 rounded-lg">
+                    目前沒有休眠商機
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    {dormantDeals.map((deal) => (
+                      <div key={deal.id} className="p-4 bg-yellow-900/20 border border-yellow-600/30 rounded-lg">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-yellow-300">{deal.name}</div>
+                            <div className="text-sm text-gray-400">{deal.company}</div>
+                            <div className="text-lg font-bold text-yellow-400 mt-2">{formatAmount(deal.amount)}</div>
+                          </div>
+                          <button
+                            onClick={() => reactivateOpportunity(deal.id)}
+                            className="px-3 py-1 bg-cyan-600 hover:bg-cyan-500 rounded text-sm transition-colors"
+                            title="重新啟動"
+                          >
+                            ♻️ Reactivate
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        )}
+
+        {/* === ACTIVE PIPELINE VIEW === */}
+        {view === 'pipeline' && dashboard && (
           <div className="mb-6">
             <div className="grid grid-cols-6 gap-2 mb-4">
               {STAGES.map((stage) => {
@@ -332,7 +509,7 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
         )}
 
         {/* Opportunity List */}
-        {opportunities.length === 0 ? (
+        {view === 'pipeline' && (opportunities.length === 0 ? (
           <div className="text-center text-gray-500 py-8">
             <div className="text-4xl mb-2">💼</div>
             <div>目前沒有商機</div>
@@ -395,7 +572,7 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
               </div>
             ))}
           </div>
-        )}
+        ))}
       </div>
 
       {/* Opportunity Detail */}
@@ -540,6 +717,12 @@ export default function SalesPipeline({ apiUrl }: SalesPipelineProps) {
           {/* Actions */}
           {selectedOpp.status === 'open' && (
             <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
+              <button
+                onClick={() => markDormant(selectedOpp.id)}
+                className="px-4 py-2 bg-yellow-600/20 border border-yellow-500 hover:bg-yellow-600/40 rounded-lg text-sm text-yellow-400"
+              >
+                💤 Dormant
+              </button>
               <button
                 onClick={() => markLost(selectedOpp.id)}
                 className="px-4 py-2 bg-red-600/20 border border-red-500 hover:bg-red-600/40 rounded-lg text-sm text-red-400"
