@@ -13,7 +13,7 @@ from fastapi import APIRouter, HTTPException
 router = APIRouter()
 
 # Products directory path
-PRODUCTS_DIR = Path(__file__).parent.parent.parent.parent.parent / "products"
+PRODUCTS_DIR = Path(__file__).parent.parent.parent.parent / "products"
 
 
 def parse_product_md(product_dir: Path) -> Optional[Dict[str, Any]]:
