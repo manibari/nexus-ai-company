@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react'
 import CEOInbox from './components/CEOInbox'
 import GoalDashboard from './components/GoalDashboard'
 import SalesPipeline from './components/SalesPipeline'
+import ProductBoard from './components/ProductBoard'
+import KnowledgeBase from './components/KnowledgeBase'
 import OfficeMap from './components/OfficeMap'
 
 interface Agent {
@@ -21,7 +23,7 @@ function App() {
   const [agents, setAgents] = useState<Agent[]>([])
   const [kpi, setKPI] = useState<KPI | null>(null)
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'inbox' | 'goals' | 'pipeline'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pipeline' | 'goals' | 'product' | 'knowledge' | 'inbox'>('dashboard')
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
@@ -69,7 +71,7 @@ function App() {
             </h1>
             <p className="text-gray-400 text-sm">War Room - CEO Dashboard</p>
           </div>
-          <nav className="flex gap-2">
+          <nav className="flex gap-2 flex-wrap">
             <button
               onClick={() => setActiveTab('dashboard')}
               className={`px-4 py-2 rounded-lg transition-colors ${
@@ -88,7 +90,7 @@ function App() {
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              💰 Sales Pipeline
+              💰 Sales Board
             </button>
             <button
               onClick={() => setActiveTab('goals')}
@@ -98,7 +100,27 @@ function App() {
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              🎯 Project Goals
+              🎯 Project Board
+            </button>
+            <button
+              onClick={() => setActiveTab('product')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                activeTab === 'product'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              🏭 Product Board
+            </button>
+            <button
+              onClick={() => setActiveTab('knowledge')}
+              className={`px-4 py-2 rounded-lg transition-colors ${
+                activeTab === 'knowledge'
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
+              }`}
+            >
+              📚 Knowledge Base
             </button>
             <button
               onClick={() => setActiveTab('inbox')}
@@ -108,7 +130,7 @@ function App() {
                   : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
               }`}
             >
-              📥 CEO Inbox
+              📥 Inbox
             </button>
           </nav>
         </div>
@@ -153,6 +175,10 @@ function App() {
               <GoalDashboard apiUrl={API_URL} />
             ) : activeTab === 'pipeline' ? (
               <SalesPipeline apiUrl={API_URL} />
+            ) : activeTab === 'product' ? (
+              <ProductBoard apiUrl={API_URL} />
+            ) : activeTab === 'knowledge' ? (
+              <KnowledgeBase apiUrl={API_URL} />
             ) : (
               <>
                 {/* Agent Grid */}
@@ -200,8 +226,11 @@ function App() {
                 <button className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors">
                   📋 新增任務
                 </button>
-                <button className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors">
-                  📚 查詢知識庫
+                <button
+                  onClick={() => setActiveTab('knowledge')}
+                  className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-left transition-colors"
+                >
+                  📚 Knowledge Base
                 </button>
               </div>
             </div>

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, ceo, control, dashboard, goals, health, intake, pipeline, tasks
+from app.api import agents, ceo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
 from app.db.database import create_tables
 
 
@@ -32,7 +32,7 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend URL
+    allow_origins=["http://localhost:3000", "http://localhost:5173"],  # Frontend URLs
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -48,6 +48,8 @@ app.include_router(control.router, prefix="/api/v1/control", tags=["Control"])
 app.include_router(intake.router, prefix="/api/v1/intake", tags=["CEO Intake"])
 app.include_router(goals.router, prefix="/api/v1/goals", tags=["Goals"])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Sales Pipeline"])
+app.include_router(product.router, prefix="/api/v1/product", tags=["Product Board"])
+app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge Base"])
 
 
 @app.get("/")
