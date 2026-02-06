@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom styles for Nexus */
+:root {
+  --color-primary: #06b6d4;
+  --color-secondary: #8b5cf6;
+  --color-background: #0f172a;
+}
+
+body {
+  background-color: var(--color-background);
+  color: white;
+}
+
+/* Pixel art style for future RPG elements */
+.pixel-font {
+  font-family: 'Press Start 2P', 'Courier New', monospace;
+  image-rendering: pixelated;
+}
+
+/* Agent status indicators */
+.status-idle {
+  @apply bg-gray-500;
+}
+
+.status-working {
+  @apply bg-green-500 animate-pulse;
+}
+
+.status-blocked-internal {
+  @apply bg-yellow-500 animate-pulse;
+}
+
+.status-blocked-user {
+  @apply bg-red-500 animate-pulse;
+}
