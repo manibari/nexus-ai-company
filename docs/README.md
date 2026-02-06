@@ -2,7 +2,7 @@
 
 > **零員工、全智能的虛擬企業系統**
 >
-> 最後更新：2024-02-06 | 版本：0.1.0
+> 最後更新：2026-02-07 | 版本：0.7.0
 
 ---
 
@@ -14,6 +14,8 @@
 | 系統怎麼運作？ | [architecture/001-system-overview.md](./architecture/001-system-overview.md) |
 | 為什麼這樣設計？ | [decisions/](#架構決策-adr) |
 | 怎麼驗證系統？ | [scenarios/README.md](./scenarios/README.md) |
+| **開發流程規範** | [protocols/agile_workflow.md](./protocols/agile_workflow.md) |
+| **文件範本** | [templates/](#範本庫-templates) |
 
 ---
 
@@ -30,8 +32,20 @@ docs/
 │   └── 003-agent-communication.md
 │
 ├── decisions/                # 架構決策紀錄 (ADR)
-│   ├── ADR-001 ~ ADR-007
+│   ├── ADR-001 ~ ADR-016
 │   └── ...
+│
+├── protocols/                # 流程規範 ✨新增
+│   ├── agile_workflow.md     # 敏捷開發流程
+│   └── deployment_standards.md
+│
+├── templates/                # 文件範本 ✨新增
+│   ├── user_story_template.md
+│   ├── sprint_template.md
+│   └── PRD-template.md
+│
+├── proposals/                # 提案文件 ✨新增
+│   └── PROPOSAL-001-Agile-Development-Process.md
 │
 ├── pipelines/                # Pipeline 設計
 │   ├── sales-pipeline.md
@@ -65,6 +79,10 @@ Architecture Decision Records - 記錄重要的技術決策與原因。
 | [010](./decisions/ADR-010-goal-driven-execution.md) | Goal-Driven Execution | 已採納 | 目標導向執行：Goal → Phase → Checkpoint |
 | [011](./decisions/ADR-011-sales-pipeline.md) | Sales Pipeline | 已採納 | 獨立銷售管理：Opportunity + MEDDIC + Pipeline Stages |
 | [012](./decisions/ADR-012-product-board.md) | Product Board | 已採納 | 產品開發管理：P1-P6 階段 + QA/UAT 追蹤 |
+| [013](./decisions/ADR-013-knowledge-management-simplified.md) | Knowledge Simplified | 已採納 | 簡化知識管理 |
+| [014](./decisions/ADR-014-ceo-todo-refactor.md) | CEO Todo Refactor | 已採納 | CEO 待辦重構 |
+| [015](./decisions/ADR-015-ceo-todo-system.md) | CEO Todo System | 已採納 | CEO 待辦系統：審批、問卷、決策 |
+| [016](./decisions/ADR-016-deployer-agent.md) | Deployer Agent | 暫緩 | DEPLOYER Agent 設計（暫緩實作）|
 
 ### 新增 ADR 規範
 
@@ -213,6 +231,7 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | 2024-02-06 | 0.4.0 | 新增 ADR-010 Goal-Driven Execution（目標導向執行）|
 | 2024-02-06 | 0.5.0 | 新增 ADR-011 Sales Pipeline、2.5D Office Map、Tab 順序調整 |
 | 2024-02-06 | 0.6.0 | 新增 Product Board、Knowledge Base UI、Tab 更新為 6 個 |
+| 2026-02-07 | 0.7.0 | 新增敏捷開發流程（整合 Product Board）、範本庫、提案系統 |
 
 ---
 
@@ -230,6 +249,39 @@ P1 Requirement → P2 Analysis → P3 Development → P4 Review → P5 Testing �
 | **Product Board** | 產品開發、P1-P6 階段、QA/UAT 追蹤 | `ProductBoard.tsx` |
 | **Knowledge Base** | 知識庫、搜尋篩選、Markdown 渲染 | `KnowledgeBase.tsx` |
 | **Inbox** | 新輸入處理、決策審批、Agent 請求 | `CEOInbox.tsx` |
+
+---
+
+## 流程規範 (Protocols)
+
+定義開發與交付的標準流程。
+
+| 規範 | 用途 | 相關系統 |
+|------|------|----------|
+| [agile_workflow.md](./protocols/agile_workflow.md) | 敏捷開發流程（整合 Product Board） | Product Board, CEO Inbox |
+| [deployment_standards.md](./protocols/deployment_standards.md) | 部署規範（產品獨立部署） | - |
+
+---
+
+## 範本庫 (Templates)
+
+標準化文件範本，供專案使用。
+
+| 範本 | 用途 | 使用者 |
+|------|------|--------|
+| [user_story_template.md](./templates/user_story_template.md) | User Story 撰寫 | CEO, PM |
+| [sprint_template.md](./templates/sprint_template.md) | Sprint 計劃追蹤 | PM |
+| [PRD-template.md](./templates/PRD-template.md) | 產品需求文件 | PM |
+
+---
+
+## 提案文件 (Proposals)
+
+需要 CEO 核准的設計提案。
+
+| 提案 | 主題 | 狀態 |
+|------|------|------|
+| [PROPOSAL-001](./proposals/PROPOSAL-001-Agile-Development-Process.md) | 敏捷開發流程 | ✅ 已核准 |
 
 ---
 

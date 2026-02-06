@@ -1,14 +1,33 @@
 # 敏捷開發流程規範
 
-> 版本：1.0 | 生效日期：2026-02-07 | 核准：CEO
+> 版本：1.1 | 生效日期：2026-02-07 | 核准：CEO
+>
+> **整合系統：** [Product Board (ADR-012)](../decisions/ADR-012-product-board.md) + [CEO Inbox (ADR-015)](../decisions/ADR-015-ceo-todo-system.md)
 
 ---
 
 ## 1. 流程總覽
 
+### 1.1 敏捷流程與 Product Board 對照
+
 ```
-CEO 提需求 ──▶ PM 拆任務 ──▶ SWE 開發 ──▶ QA 測試 ──▶ CEO 驗收
+敏捷流程                    Product Board 階段
+─────────────────────────────────────────────────
+CEO 提需求     ──────────▶  P1 Backlog (需求池)
+PM 拆任務      ──────────▶  P2 Spec Ready (規格確認)
+SWE 開發       ──────────▶  P3 In Progress (開發中)
+QA 測試        ──────────▶  P4 QA Testing (內部測試)
+CEO 驗收       ──────────▶  P5 UAT (使用者驗收)
+發布完成       ──────────▶  P6 Done (上線完成)
 ```
+
+### 1.2 系統整合點
+
+| 系統 | 用途 | 操作者 |
+|------|------|--------|
+| **CEO Inbox** | 需求提交、審批、驗收通知 | CEO |
+| **Product Board** | 任務追蹤、階段管理、看板視圖 | PM, SWE, QA |
+| **前端 URL** | http://localhost:3000 | 全員 |
 
 ---
 
@@ -74,18 +93,17 @@ CEO 提需求 ──▶ PM 拆任務 ──▶ SWE 開發 ──▶ QA 測試 �
 
 ## 5. 任務管理
 
-### 5.1 狀態標記
+### 5.1 狀態標記（對照 Product Board）
 
-| 標記 | 狀態 | 說明 |
-|------|------|------|
-| ⬜ | Backlog | 待排入 |
-| 📋 | To Do | 已排入 Sprint |
-| 🔄 | In Progress | 進行中 |
-| 👀 | In Review | 待審查 |
-| 🧪 | Testing | QA 測試中 |
-| ✅ | Done | 完成 |
-| ❌ | Blocked | 受阻 |
-| 🚀 | Released | 已發布 |
+| 標記 | 狀態 | Product Board | 說明 |
+|------|------|---------------|------|
+| ⬜ | Backlog | P1_BACKLOG | CEO 提出的需求 |
+| 📋 | To Do | P2_SPEC_READY | PM 完成規格 |
+| 🔄 | In Progress | P3_IN_PROGRESS | SWE 開發中 |
+| 🧪 | Testing | P4_QA_TESTING | QA 測試中 |
+| 👀 | UAT | P5_UAT | CEO 驗收中 |
+| ✅ | Done | P6_DONE | 完成發布 |
+| ❌ | Blocked | BLOCKED | 受阻 |
 
 ### 5.2 任務估算
 
