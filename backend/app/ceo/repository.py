@@ -21,7 +21,8 @@ class TodoRepository:
 
     def __init__(self):
         self._todos: Dict[str, TodoItem] = {}
-        self._init_sample_data()
+        # 移除自動初始化樣本資料，避免每次重啟覆蓋用戶回覆
+        # self._init_sample_data()
 
     def _init_sample_data(self):
         """初始化範例資料"""
