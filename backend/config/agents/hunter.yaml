@@ -1,0 +1,142 @@
+# ===========================================
+# HUNTER (Sales Agent) 行為規則
+# ===========================================
+# 這個檔案定義 Sales Agent 的行為規則
+# CEO 可以透過修改此檔案來調整 Agent 行為，無需改程式碼
+
+name: "Sales Agent"
+version: "1.0.0"
+
+# -----------------------------
+# 審批門檻
+# -----------------------------
+approval_thresholds:
+  # 折扣超過此比例需要 CEO 審批
+  discount_percentage: 5
+
+  # 交易金額超過此數值需要 CEO 審批 (USD)
+  deal_value_usd: 50000
+
+  # 自定義審批規則
+  custom_rules:
+    large_enterprise:
+      field: "company_size"
+      operator: ">"
+      threshold: 1000
+      description: "大型企業需要審批"
+
+    special_payment_terms:
+      field: "payment_terms_days"
+      operator: ">"
+      threshold: 60
+      description: "付款條件超過 60 天需要審批"
+
+# -----------------------------
+# 通訊規則
+# -----------------------------
+communication:
+  # 語氣: formal, professional, casual, friendly
+  tone: "professional"
+
+  # 最大 follow-up 次數
+  max_follow_ups: 3
+
+  # follow-up 間隔天數
+  follow_up_interval_days: 5
+
+  # 開發信最大長度
+  max_email_length_chars: 2000
+
+  # 必須包含問候語
+  require_greeting: true
+
+  # 必須包含簽名
+  require_signature: true
+
+  # 禁用語（這些詞不應出現在通訊中）
+  forbidden_words:
+    - "guarantee"
+    - "promise"
+    - "unlimited"
+
+# -----------------------------
+# 時程規則
+# -----------------------------
+schedule:
+  # 不發送通訊的日子
+  blackout_days:
+    - "saturday"
+    - "sunday"
+
+  # 偏好發送時間
+  preferred_hours_start: "09:00"
+  preferred_hours_end: "18:00"
+
+  # 時區
+  timezone: "Asia/Taipei"
+
+  # 尊重假日
+  respect_holidays: true
+  holiday_country: "TW"
+
+# -----------------------------
+# 升級規則
+# -----------------------------
+escalation:
+  # 這些情況一律通知 CEO
+  always_notify_ceo:
+    - "competitor_mentioned"    # 客戶提到競爭對手
+    - "legal_concern"           # 法律相關問題
+    - "negative_sentiment"      # 客戶語氣負面
+    - "budget_exceeded"         # 超出預算
+    - "urgent_request"          # 客戶緊急要求
+    - "executive_contact"       # 聯繫到高層
+
+  # 超過此時間無進展自動升級（小時）
+  auto_escalate_after_hours: 48
+
+  # 升級鏈
+  escalation_chain:
+    - "ORCHESTRATOR"
+    - "CEO"
+
+# -----------------------------
+# ICP (理想客戶輪廓)
+# -----------------------------
+icp:
+  # 目標產業
+  industries:
+    - "technology"
+    - "finance"
+    - "healthcare"
+    - "manufacturing"
+
+  # 公司規模（員工數）
+  company_size:
+    min: 50
+    max: 5000
+
+  # 目標地區
+  regions:
+    - "TW"
+    - "US"
+    - "JP"
+    - "SG"
+
+  # 排除條件
+  exclusions:
+    - "government"
+    - "non_profit"
+
+# -----------------------------
+# 自動化規則
+# -----------------------------
+automation:
+  # 自動 qualify leads
+  auto_qualify: true
+
+  # 自動發送 follow-up
+  auto_follow_up: true
+
+  # 自動標記 lost（無回應超過此天數）
+  auto_lost_after_days: 30

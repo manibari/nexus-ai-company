@@ -1,0 +1,194 @@
+# ===========================================
+# Product Pipeline 關卡配置
+# ===========================================
+# 定義 Product Pipeline 各階段的關卡規則
+
+name: "Product Pipeline"
+version: "1.0.0"
+
+# -----------------------------
+# 全域設定
+# -----------------------------
+settings:
+  allow_manual_override: true
+  allow_stage_skip: false
+  allow_stage_rollback: true
+  log_all_transitions: true
+
+# -----------------------------
+# 階段關卡
+# -----------------------------
+gates:
+  # P1 -> P2: 進入 Spec Ready
+  - stage: "spec_ready"
+    type: "condition"
+    conditions:
+      - field: "has_requirements"
+        operator: "=="
+        value: true
+        description: "必須有需求說明"
+      - field: "has_acceptance_criteria"
+        operator: "=="
+        value: true
+        description: "必須有驗收標準"
+    notify_on_enter: false
+
+  # P2 -> P3: 進入 In Progress
+  - stage: "in_progress"
+    type: "condition"
+    conditions:
+      - field: "has_assignee"
+        operator: "=="
+        value: true
+        description: "必須有指派的 Engineer"
+      - field: "has_estimate"
+        operator: "=="
+        value: true
+        description: "必須有工時預估"
+    notify_on_enter: false
+
+  # P3 -> P4: 進入 QA Testing
+  - stage: "qa_testing"
+    type: "condition"
+    conditions:
+      - field: "has_artifact"
+        operator: "=="
+        value: true
+        description: "必須有可測試的成品"
+      - field: "self_tested"
+        operator: "=="
+        value: true
+        description: "Engineer 必須先自測"
+    notify_on_enter: true
+    notify_roles:
+      - "INSPECTOR"
+
+  # P4 -> P5: 進入 UAT (需要 CEO 審批)
+  - stage: "uat"
+    type: "approval"
+    requires_approval: true
+    approval_roles:
+      - "CEO"
+    conditions:
+      - field: "qa_passed"
+        operator: "=="
+        value: true
+        description: "必須通過 QA 測試"
+      - field: "has_staging_url"
+        operator: "=="
+        value: true
+        description: "必須部署到 Staging 環境"
+    notify_on_enter: true
+    auto_approve_after_seconds: 0
+
+  # P5 -> P6: 進入 Done
+  - stage: "done"
+    type: "approval"
+    requires_approval: true
+    approval_roles:
+      - "CEO"
+    conditions:
+      - field: "uat_approved"
+        operator: "=="
+        value: true
+        description: "必須通過 UAT"
+    notify_on_enter: true
+    auto_approve_after_seconds: 0
+
+# -----------------------------
+# QA 測試規則
+# -----------------------------
+qa_rules:
+  # 必須通過的測試類型
+  required_tests:
+    - "unit_tests"
+    - "lint"
+
+  # 可選測試
+  optional_tests:
+    - "integration_tests"
+    - "e2e_tests"
+
+  # 最低測試覆蓋率
+  min_coverage_percentage: 60
+
+  # 最大允許的警告數
+  max_warnings: 10
+
+  # 最大允許的待修項目
+  max_todos: 5
+
+  # 自動退回條件
+  auto_reject:
+    - condition: "tests_failed"
+      message: "測試失敗，請修復後重新提交"
+    - condition: "coverage_below_threshold"
+      message: "測試覆蓋率不足"
+
+# -----------------------------
+# 特殊規則
+# -----------------------------
+special_rules:
+  # 緊急修復快速通道
+  hotfix:
+    condition:
+      field: "is_hotfix"
+      operator: "=="
+      value: true
+    gates:
+      - stage: "qa_testing"
+        requires_approval: false
+      - stage: "uat"
+        auto_approve_after_seconds: 1800  # 30 分鐘後自動放行
+
+  # 大型功能額外審查
+  large_feature:
+    condition:
+      field: "estimated_hours"
+      operator: ">"
+      value: 40
+    gates:
+      - stage: "spec_ready"
+        requires_approval: true
+        approval_roles:
+          - "CEO"
+
+# -----------------------------
+# 自動化規則
+# -----------------------------
+automation:
+  # QA 通過自動進入 UAT
+  auto_promote_to_uat:
+    enabled: false  # 目前需要手動確認
+
+  # 自動部署到 Staging
+  auto_deploy_staging:
+    enabled: true
+    on_stage: "qa_testing"
+
+  # 自動部署到 Production
+  auto_deploy_production:
+    enabled: true
+    on_stage: "done"
+
+# -----------------------------
+# 通知規則
+# -----------------------------
+notifications:
+  on_stage_change:
+    notify:
+      - "ORCHESTRATOR"
+      - "CEO"
+    channels:
+      - "inbox"
+      - "websocket"
+
+  on_qa_failed:
+    notify:
+      - "BUILDER"
+      - "ORCHESTRATOR"
+
+  on_uat_ready:
+    notify:
+      - "CEO"
+    priority: "high"

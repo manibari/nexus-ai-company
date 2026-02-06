@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, ceo, dashboard, health, tasks
+from app.api import agents, ceo, control, dashboard, health, tasks
 from app.db.database import create_tables
 
 
@@ -44,6 +44,7 @@ app.include_router(agents.router, prefix="/api/v1/agents", tags=["Agents"])
 app.include_router(tasks.router, prefix="/api/v1/tasks", tags=["Tasks"])
 app.include_router(ceo.router, prefix="/api/v1/ceo", tags=["CEO"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["Dashboard"])
+app.include_router(control.router, prefix="/api/v1/control", tags=["Control"])
 
 
 @app.get("/")

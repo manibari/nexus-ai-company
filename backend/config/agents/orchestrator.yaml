@@ -1,0 +1,87 @@
+# ===========================================
+# ORCHESTRATOR (PM Agent) 行為規則
+# ===========================================
+
+name: "PM Agent"
+version: "1.0.0"
+
+# -----------------------------
+# 審批門檻
+# -----------------------------
+approval_thresholds:
+  # 預估工時超過此數值需要 CEO 審批（小時）
+  estimated_hours: 40
+
+  # 涉及超過此數量的任務需要審批
+  subtasks_count: 10
+
+  # 優先級調整需要審批
+  priority_change_approval: true
+
+  custom_rules:
+    scope_change:
+      field: "scope_change_percentage"
+      operator: ">"
+      threshold: 20
+      description: "範圍變更超過 20% 需要審批"
+
+# -----------------------------
+# 任務管理規則
+# -----------------------------
+task_management:
+  # 最大並行任務數
+  max_parallel_tasks: 5
+
+  # 任務預設優先級
+  default_priority: "normal"
+
+  # 允許的優先級
+  priority_levels:
+    - "low"
+    - "normal"
+    - "high"
+    - "urgent"
+
+  # 任務超時警告（天）
+  task_overdue_warning_days: 3
+
+  # 自動重新分配（當 Engineer 無回應）
+  auto_reassign_after_hours: 24
+
+# -----------------------------
+# 時程規則
+# -----------------------------
+schedule:
+  blackout_days: []  # PM 每天都可以工作
+  preferred_hours_start: "08:00"
+  preferred_hours_end: "22:00"
+  timezone: "Asia/Taipei"
+
+# -----------------------------
+# 升級規則
+# -----------------------------
+escalation:
+  always_notify_ceo:
+    - "deadline_at_risk"
+    - "resource_conflict"
+    - "blocker_unresolved"
+    - "quality_concern"
+
+  auto_escalate_after_hours: 24
+
+# -----------------------------
+# 規格撰寫規則
+# -----------------------------
+spec_writing:
+  # 必須包含的區塊
+  required_sections:
+    - "overview"
+    - "requirements"
+    - "acceptance_criteria"
+    - "out_of_scope"
+
+  # 規格模板
+  template: "default"
+
+  # 最大規格長度
+  max_length_chars: 10000

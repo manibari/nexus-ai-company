@@ -1,0 +1,151 @@
+# ===========================================
+# Sales Pipeline 關卡配置
+# ===========================================
+# 定義 Sales Pipeline 各階段的關卡規則
+
+name: "Sales Pipeline"
+version: "1.0.0"
+
+# -----------------------------
+# 全域設定
+# -----------------------------
+settings:
+  # 允許人工覆寫
+  allow_manual_override: true
+
+  # 允許跳過階段
+  allow_stage_skip: false
+
+  # 允許倒退階段
+  allow_stage_rollback: true
+
+  # 記錄所有轉換
+  log_all_transitions: true
+
+# -----------------------------
+# 階段關卡
+# -----------------------------
+gates:
+  # S1 -> S2: 進入 Qualified
+  - stage: "qualified"
+    type: "condition"
+    conditions:
+      - field: "has_email"
+        operator: "=="
+        value: true
+        description: "必須有 Email"
+      - field: "has_company_name"
+        operator: "=="
+        value: true
+        description: "必須有公司名稱"
+    notify_on_enter: false
+
+  # S2 -> S3: 進入 Contacted
+  - stage: "contacted"
+    type: "notification"
+    notify_on_enter: true
+    notify_roles:
+      - "CEO"
+
+  # S3 -> S4: 進入 Engaged (重要關卡)
+  - stage: "engaged"
+    type: "approval"
+    requires_approval: false  # 不需要審批，但會通知
+    notify_on_enter: true
+    notify_roles:
+      - "CEO"
+    conditions:
+      - field: "has_response"
+        operator: "=="
+        value: true
+        description: "客戶必須有回覆"
+
+  # S4 -> S5 Won: 進入 Closed Won (需要審批)
+  - stage: "closed_won"
+    type: "approval"
+    requires_approval: true
+    approval_roles:
+      - "CEO"
+    auto_approve_after_seconds: 0  # 不自動放行
+    conditions:
+      - field: "has_contract"
+        operator: "=="
+        value: true
+        description: "必須有合約"
+    notify_on_enter: true
+
+  # S4 -> S5 Lost: 進入 Closed Lost
+  - stage: "closed_lost"
+    type: "condition"
+    requires_approval: false
+    conditions:
+      - field: "has_lost_reason"
+        operator: "=="
+        value: true
+        description: "必須填寫失敗原因"
+    notify_on_enter: true
+    notify_roles:
+      - "CEO"
+
+# -----------------------------
+# 特殊規則
+# -----------------------------
+special_rules:
+  # 大型交易的額外關卡
+  large_deal:
+    condition:
+      field: "deal_value"
+      operator: ">"
+      value: 100000
+    gates:
+      - stage: "engaged"
+        requires_approval: true
+        approval_roles:
+          - "CEO"
+
+  # VIP 客戶快速通道
+  vip_fast_track:
+    condition:
+      field: "is_vip"
+      operator: "=="
+      value: true
+    allow_stage_skip: true
+
+# -----------------------------
+# 自動化規則
+# -----------------------------
+automation:
+  # 無回應自動轉 Lost
+  auto_lost:
+    enabled: true
+    after_days: 30
+    from_stages:
+      - "contacted"
+      - "engaged"
+
+  # 自動 follow-up
+  auto_follow_up:
+    enabled: true
+    interval_days: 7
+    max_attempts: 3
+    from_stages:
+      - "contacted"
+
+# -----------------------------
+# 通知規則
+# -----------------------------
+notifications:
+  # 階段變更通知
+  on_stage_change:
+    notify:
+      - "CEO"
+    channels:
+      - "inbox"
+      - "websocket"
+
+  # 停滯警告
+  on_stale:
+    threshold_days: 7
+    notify:
+      - "HUNTER"
+      - "CEO"
