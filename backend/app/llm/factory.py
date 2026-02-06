@@ -16,13 +16,21 @@ class LLMProviderFactory:
     工廠模式建立 LLM Provider
 
     使用方式：
-        provider = LLMProviderFactory.create("gemini")
+        provider = LLMProviderFactory.create("claude")
         response = await provider.chat([...])
+
+    優先順序（依 ADR-002）：
+        1. Claude (Primary) - AI Agent 首選
+        2. Gemini (Secondary) - 備用
+        3. OpenAI (Tertiary) - 最後選擇
     """
 
+    # 優先順序：Claude > Gemini > OpenAI
+    _priority = ["claude", "gemini", "openai"]
+
     _providers = {
-        "gemini": GeminiProvider,
         "claude": ClaudeProvider,
+        "gemini": GeminiProvider,
         "openai": OpenAIProvider,
     }
 
@@ -99,12 +107,32 @@ class LLMProviderFactory:
         """
         取得當前設定的 Provider
 
-        根據 LLM_PROVIDER 環境變數決定
+        根據 LLM_PROVIDER 環境變數決定，預設為 Claude
         """
-        provider_name = os.getenv("LLM_PROVIDER", "gemini")
+        provider_name = os.getenv("LLM_PROVIDER", "claude")
         return cls.create(provider_name)
 
     @classmethod
+    def get_with_fallback(cls) -> LLMProvider:
+        """
+        取得 Provider，依優先順序嘗試
+
+        如果首選 Provider 沒有設定 API Key，會嘗試下一個
+        """
+        for provider_name in cls._priority:
+            env_key = cls._env_keys[provider_name]
+            if os.getenv(env_key):
+                try:
+                    return cls.create(provider_name)
+                except ValueError:
+                    continue
+
+        raise ValueError(
+            "No LLM provider available. Please set at least one API key: "
+            "ANTHROPIC_API_KEY, GEMINI_API_KEY, or OPENAI_API_KEY"
+        )
+
+    @classmethod
     def list_providers(cls) -> list[str]:
-        """列出所有可用的 Provider"""
-        return list(cls._providers.keys())
+        """列出所有可用的 Provider（依優先順序）"""
+        return cls._priority.copy()

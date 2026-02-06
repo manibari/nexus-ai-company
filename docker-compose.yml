@@ -15,10 +15,10 @@ services:
       - ./backend:/app
       - nexus-db:/app/data
     environment:
-      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
-      - LLM_PROVIDER=${LLM_PROVIDER:-gemini}
+      - LLM_PROVIDER=${LLM_PROVIDER:-claude}
       - DATABASE_URL=sqlite:///./data/nexus.db
       - DEBUG=${DEBUG:-true}
       - DAILY_BUDGET_USD=${DAILY_BUDGET_USD:-10.00}
