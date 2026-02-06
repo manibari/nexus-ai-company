@@ -251,3 +251,25 @@ async def quick_create_task(
         "title": title,
         "message": f"已建立待辦事項 {task_id}",
     }
+
+
+# === MEDDIC Analysis ===
+
+class MEDDICRequest(BaseModel):
+    """MEDDIC 分析請求"""
+    content: str
+
+
+@router.post("/analyze-meddic")
+async def analyze_meddic(request: MEDDICRequest):
+    """
+    分析內容的 MEDDIC 指標
+
+    返回 Pain, Champion, Economic Buyer 分析結果
+    """
+    from app.engines.meddic.engine import MEDDICEngine
+
+    engine = MEDDICEngine()
+    result = await engine.analyze(content=request.content)
+
+    return result.to_dict()

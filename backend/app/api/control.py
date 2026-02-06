@@ -9,7 +9,7 @@ CEO 控制 Agent 的 API：
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -201,7 +201,7 @@ async def get_agent_rules(agent_id: str):
 class RuleUpdate(BaseModel):
     """規則更新"""
     path: str  # e.g., "approval_thresholds.discount_percentage"
-    value: any
+    value: Any
 
 
 @router.patch("/rules/{agent_id}")
