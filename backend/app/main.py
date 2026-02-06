@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import agents, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
+from app.api import activity, agents, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
 from app.db.database import create_tables
 
 
@@ -51,6 +51,7 @@ app.include_router(goals.router, prefix="/api/v1/goals", tags=["Goals"])
 app.include_router(pipeline.router, prefix="/api/v1/pipeline", tags=["Sales Pipeline"])
 app.include_router(product.router, prefix="/api/v1/product", tags=["Product Board"])
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge Base"])
+app.include_router(activity.router, prefix="/api/v1/activity", tags=["Agent Activity Log"])
 
 
 @app.get("/")
