@@ -117,12 +117,17 @@ class AgentRegistry:
             },
         )
 
-        # 3. 呼叫 Agent
+        # 3. 更新前端狀態為 working
+        from app.api.agents import set_agent_idle, set_agent_working
+        task_desc = payload.get("title") or payload.get("intent") or "處理中"
+        set_agent_working(target_id, task_desc)
+
+        # 4. 呼叫 Agent
         try:
             logger.info(f"[{handoff_id}] Dispatching {from_agent} → {target_id}")
             result = await handler.handle(payload)
 
-            # 4. 記錄成功
+            # 5. 記錄成功
             await self._update_handoff(
                 handoff_id=handoff_id,
                 status="completed",
@@ -165,6 +170,8 @@ class AgentRegistry:
                 "message": str(e),
                 "handoff_id": handoff_id,
             }
+        finally:
+            set_agent_idle(target_id)
 
     async def _record_handoff(
         self,

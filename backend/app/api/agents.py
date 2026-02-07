@@ -65,6 +65,20 @@ def _get_agent_status(agent_id: str) -> AgentStatus:
     return _agent_states[agent_id]
 
 
+def set_agent_working(agent_id: str, current_task: str):
+    """將 Agent 狀態設為 working（供 registry.dispatch 呼叫）"""
+    agent = _get_agent_status(agent_id)
+    agent.status = "working"
+    agent.current_task = current_task
+
+
+def set_agent_idle(agent_id: str):
+    """將 Agent 狀態設回 idle（供 registry.dispatch 呼叫）"""
+    agent = _get_agent_status(agent_id)
+    agent.status = "idle"
+    agent.current_task = None
+
+
 @router.get("/", response_model=List[AgentStatus])
 async def list_agents():
     """取得所有 Agent 狀態"""
