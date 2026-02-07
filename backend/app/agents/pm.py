@@ -696,22 +696,8 @@ User Story:
                 metadata={"feature_id": feature_id},
             )
 
-            # 分派給 DEVELOPER
+            # 分派給 DEVELOPER（DEVELOPER Agent 自行記錄活動日誌）
             developer_task = await self._assign_to_developer(feature)
-
-            # 記錄分派任務
-            await activity_repo.log(
-                agent_id="DEVELOPER",
-                agent_name="Developer Agent",
-                activity_type=ActivityType.TASK_START,
-                message=f"開始開發: {feature.title}",
-                project_name=feature.project_name,
-                metadata={
-                    "feature_id": feature_id,
-                    "task_id": developer_task.get("id"),
-                    "estimated_days": feature.estimated_days,
-                },
-            )
 
             return {
                 "status": "approved",
@@ -750,32 +736,45 @@ User Story:
         feature.assigned_to = "DEVELOPER"
         await self.feature_repo.update(feature)
 
-        # 建立開發任務
-        task = {
+        # === Feature → ProductItem Bridge ===
+        product_item = await self._create_product_item(feature)
+        product_item_id = product_item.id if product_item else None
+
+        # 透過 Registry dispatch 給 DEVELOPER Agent
+        from app.agents.registry import get_registry
+        registry = get_registry()
+
+        dispatch_result = await registry.dispatch(
+            target_id="DEVELOPER",
+            payload={
+                "content": feature.description,
+                "feature_id": feature.id,
+                "product_item_id": product_item_id,
+                "project": feature.project_name,
+                "title": feature.title,
+                "requirements": {
+                    "technical": feature.technical_requirements,
+                    "ui": feature.ui_requirements,
+                    "acceptance_criteria": feature.acceptance_criteria,
+                },
+                "priority": feature.priority.value,
+                "estimated_days": feature.estimated_days,
+            },
+            from_agent="PM",
+        )
+
+        logger.info(f"Dispatched {feature.id} to DEVELOPER")
+
+        return {
             "id": f"DEV-{feature.id}",
             "type": "feature_implementation",
             "feature_id": feature.id,
+            "product_item_id": product_item_id,
             "project": feature.project_name,
             "title": feature.title,
-            "description": feature.description,
-            "requirements": {
-                "technical": feature.technical_requirements,
-                "ui": feature.ui_requirements,
-                "acceptance_criteria": feature.acceptance_criteria,
-            },
-            "priority": feature.priority.value,
-            "estimated_days": feature.estimated_days,
+            "dispatch_result": dispatch_result,
             "assigned_at": datetime.utcnow().isoformat(),
         }
-
-        logger.info(f"Assigned {feature.id} to DEVELOPER: {task['id']}")
-
-        # === Feature → ProductItem Bridge ===
-        product_item = await self._create_product_item(feature)
-        if product_item:
-            task["product_item_id"] = product_item.id
-
-        return task
 
     async def _create_product_item(self, feature: FeatureRequest) -> Optional[Any]:
         """從 Feature 建立 ProductItem，放入 Product Board Pipeline"""

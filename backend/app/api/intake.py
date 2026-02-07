@@ -110,7 +110,7 @@ async def receive_ceo_input(request: CEOInputRequest):
 
     # 根據意圖透過 Registry 分派到對應 Agent
     extra_data = {}
-    routable_agents = {"PM", "HUNTER", "ORCHESTRATOR"}
+    routable_agents = {"PM", "HUNTER", "ORCHESTRATOR", "QA"}
 
     if analysis.route_to in routable_agents:
         from app.agents.registry import get_registry

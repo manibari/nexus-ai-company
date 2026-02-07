@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, pm, product, tasks
+from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, tasks
 from app.db.database import create_tables
 
 
@@ -26,12 +26,16 @@ async def lifespan(app: FastAPI):
     from app.agents.pm import get_pm_agent
     from app.agents.hunter import HunterAgent
     from app.agents.orchestrator import OrchestratorAgent
+    from app.agents.developer import get_developer_agent
+    from app.agents.qa import get_qa_agent
 
     registry = AgentRegistry(session_factory=AsyncSessionLocal)
     registry.register(GatekeeperAgent())
     registry.register(get_pm_agent())
     registry.register(HunterAgent())
     registry.register(OrchestratorAgent())
+    registry.register(get_developer_agent())
+    registry.register(get_qa_agent())
     set_registry(registry)
 
     # 初始化 Redis + Message Bus
@@ -105,6 +109,8 @@ app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["Product Cata
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge Base"])
 app.include_router(activity.router, prefix="/api/v1/activity", tags=["Agent Activity Log"])
 app.include_router(pm.router, prefix="/api/v1/pm", tags=["PM Agent"])
+app.include_router(developer.router, prefix="/api/v1/developer", tags=["Developer Agent"])
+app.include_router(qa.router, prefix="/api/v1/qa", tags=["QA Agent"])
 
 
 @app.get("/")
