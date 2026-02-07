@@ -14,6 +14,8 @@ from app.db.database import create_tables
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
+    import os
+
     # Startup
     await create_tables()
 
@@ -32,10 +34,42 @@ async def lifespan(app: FastAPI):
     registry.register(OrchestratorAgent())
     set_registry(registry)
 
+    # 初始化 Redis + Message Bus
+    redis_client = None
+    redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+
+    try:
+        import redis.asyncio as aioredis
+        from app.agents.message_bus import MessageBus, set_bus
+
+        redis_client = aioredis.from_url(
+            redis_url,
+            decode_responses=True,
+            retry_on_timeout=True,
+        )
+
+        # 檢查連線
+        if await redis_client.ping():
+            bus = MessageBus(
+                redis_client=redis_client,
+                registry=registry,
+                session_factory=AsyncSessionLocal,
+            )
+            set_bus(bus)
+            print(f"   Redis connected: {redis_url}")
+        else:
+            print(f"   Redis ping failed, MessageBus disabled")
+    except Exception as e:
+        print(f"   Redis unavailable ({e}), MessageBus disabled — running without it")
+        redis_client = None
+
     print("🚀 Nexus AI Company is starting up...")
     print(f"   Registered agents: {[a['id'] for a in registry.list_agents()]}")
     yield
     # Shutdown
+    if redis_client:
+        await redis_client.aclose()
+        print("   Redis connection closed")
     print("👋 Nexus AI Company is shutting down...")
 
 

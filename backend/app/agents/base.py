@@ -472,28 +472,92 @@ Available actions for your role:
         self.status = AgentStatus.WORKING
         await self._update_db_status()
 
-        return response.payload.get("approved", False)
+        return response.get("approved", False)
 
     async def _update_db_status(self):
-        """更新資料庫中的狀態"""
-        # TODO: Implement database update
-        pass
+        """更新資料庫中的 Agent 狀態"""
+        try:
+            from app.db.database import AsyncSessionLocal
+            from app.db.models import Agent as AgentModel
+
+            async with AsyncSessionLocal() as session:
+                row = await session.get(AgentModel, self.config.id)
+                if row:
+                    row.status = self.status.value
+                    row.current_task_id = self.current_task_id
+                    row.last_active_at = datetime.now()
+                    await session.commit()
+                else:
+                    # Agent 尚未在 DB 中，建立一筆
+                    row = AgentModel(
+                        id=self.config.id,
+                        name=self.config.name,
+                        role=self.config.role,
+                        status=self.status.value,
+                        current_task_id=self.current_task_id,
+                        last_active_at=datetime.now(),
+                    )
+                    session.add(row)
+                    await session.commit()
+        except Exception as e:
+            logger.error(f"[{self.id}] Failed to update DB status: {e}")
 
     async def _log_action(self, result: ThinkResult, action_result: Dict[str, Any]):
-        """記錄行動"""
-        # TODO: Implement logging
+        """記錄行動到 logs table"""
         logger.info(
             f"[{self.id}] Action: {result.action}, "
             f"Result: {action_result.get('status', 'unknown')}"
         )
+        try:
+            from app.db.database import AsyncSessionLocal
+            from app.db.models import Log
+
+            log_id = f"LOG-{uuid4().hex[:8].upper()}"
+            async with AsyncSessionLocal() as session:
+                log = Log(
+                    id=log_id,
+                    type="action",
+                    agent_id=self.config.id,
+                    task_id=self.current_task_id,
+                    subject=result.action,
+                    payload={
+                        "params": result.params,
+                        "reasoning": result.reasoning,
+                        "confidence": result.confidence,
+                        "result": action_result,
+                    },
+                    created_at=datetime.now(),
+                )
+                session.add(log)
+                await session.commit()
+        except Exception as e:
+            logger.error(f"[{self.id}] Failed to log action: {e}")
 
     async def _record_llm_cost(self, response):
-        """記錄 LLM 呼叫成本"""
-        # TODO: Implement cost recording to ledger
+        """記錄 LLM 呼叫成本到 ledger table"""
         logger.debug(
             f"[{self.id}] LLM call: {response.input_tokens} in, "
             f"{response.output_tokens} out, ${response.cost_usd}"
         )
+        try:
+            from app.db.database import AsyncSessionLocal
+            from app.db.models import LedgerEntry
+
+            async with AsyncSessionLocal() as session:
+                entry = LedgerEntry(
+                    agent_id=self.config.id,
+                    task_id=self.current_task_id,
+                    provider=getattr(response, "provider", "unknown"),
+                    model=getattr(response, "model", "unknown"),
+                    input_tokens=getattr(response, "input_tokens", 0),
+                    output_tokens=getattr(response, "output_tokens", 0),
+                    cost_usd=getattr(response, "cost_usd", 0.0),
+                    created_at=datetime.now(),
+                )
+                session.add(entry)
+                await session.commit()
+        except Exception as e:
+            logger.error(f"[{self.id}] Failed to record LLM cost: {e}")
 
     # === Message Bus 互動 ===
 
