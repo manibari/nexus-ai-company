@@ -2,6 +2,42 @@ version: '3.8'
 
 services:
   # ===========================================
+  # PostgreSQL - Primary Database
+  # ===========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: nexus-postgres
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: nexus
+      POSTGRES_USER: nexus
+      POSTGRES_PASSWORD: nexus_dev
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nexus"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ===========================================
+  # Redis - Message Bus & Cache
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: nexus-redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # ===========================================
   # Backend - FastAPI
   # ===========================================
   backend:
@@ -19,7 +55,8 @@ services:
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - OPENAI_API_KEY=${OPENAI_API_KEY}
       - LLM_PROVIDER=${LLM_PROVIDER:-claude}
-      - DATABASE_URL=sqlite:///./data/nexus.db
+      - DATABASE_URL=postgresql+asyncpg://nexus:nexus_dev@postgres:5432/nexus
+      - REDIS_URL=redis://redis:6379/0
       - DEBUG=${DEBUG:-true}
       - DAILY_BUDGET_USD=${DAILY_BUDGET_USD:-10.00}
     healthcheck:
@@ -27,6 +64,11 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # ===========================================
@@ -50,4 +92,6 @@ services:
 
 volumes:
   nexus-db:
+    driver: local
+  pgdata:
     driver: local
