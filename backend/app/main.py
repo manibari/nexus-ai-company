@@ -60,6 +60,13 @@ async def lifespan(app: FastAPI):
                 session_factory=AsyncSessionLocal,
             )
             set_bus(bus)
+
+            # Agent 狀態持久化：設定 Redis singleton + 恢復狀態
+            from app.agents.agent_state import set_redis
+            from app.api.agents import restore_agent_states
+            set_redis(redis_client)
+            await restore_agent_states()
+
             print(f"   Redis connected: {redis_url}")
         else:
             print(f"   Redis ping failed, MessageBus disabled")

@@ -120,7 +120,7 @@ class AgentRegistry:
         # 3. 更新前端狀態為 working
         from app.api.agents import set_agent_idle, set_agent_working
         task_desc = payload.get("title") or payload.get("intent") or "處理中"
-        set_agent_working(target_id, task_desc)
+        await set_agent_working(target_id, task_desc)
 
         # 4. 呼叫 Agent
         try:
@@ -171,7 +171,7 @@ class AgentRegistry:
                 "handoff_id": handoff_id,
             }
         finally:
-            set_agent_idle(target_id)
+            await set_agent_idle(target_id)
 
     async def _record_handoff(
         self,

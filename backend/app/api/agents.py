@@ -65,18 +65,36 @@ def _get_agent_status(agent_id: str) -> AgentStatus:
     return _agent_states[agent_id]
 
 
-def set_agent_working(agent_id: str, current_task: str):
+async def set_agent_working(agent_id: str, current_task: str):
     """將 Agent 狀態設為 working（供 registry.dispatch 呼叫）"""
+    from app.agents.agent_state import save_agent_state
+
     agent = _get_agent_status(agent_id)
     agent.status = "working"
     agent.current_task = current_task
+    await save_agent_state(
+        agent_id=agent_id,
+        status=agent.status,
+        current_task=agent.current_task,
+        name=agent.name,
+        role=agent.role,
+    )
 
 
-def set_agent_idle(agent_id: str):
+async def set_agent_idle(agent_id: str):
     """將 Agent 狀態設回 idle（供 registry.dispatch 呼叫）"""
+    from app.agents.agent_state import save_agent_state
+
     agent = _get_agent_status(agent_id)
     agent.status = "idle"
     agent.current_task = None
+    await save_agent_state(
+        agent_id=agent_id,
+        status=agent.status,
+        current_task=agent.current_task,
+        name=agent.name,
+        role=agent.role,
+    )
 
 
 @router.get("/", response_model=List[AgentStatus])
@@ -162,6 +180,18 @@ async def update_agent_status(agent_id: str, update: AgentStatusUpdate):
         project_name=update.project_name,
     )
 
+    # Persist to Redis
+    from app.agents.agent_state import save_agent_state
+    blocking_str = str(agent.blocking_info) if agent.blocking_info else None
+    await save_agent_state(
+        agent_id=agent_id,
+        status=agent.status,
+        current_task=agent.current_task,
+        name=agent.name,
+        role=agent.role,
+        blocking_info=blocking_str,
+    )
+
     return agent
 
 
@@ -175,3 +205,23 @@ async def trigger_agent_action(agent_id: str, action: AgentAction):
         "status": "queued",
         "message": f"Action '{action.action}' queued for agent {agent_id}",
     }
+
+
+async def restore_agent_states():
+    """從 Redis 恢復 Agent 狀態到 _agent_states（main.py lifespan 呼叫）"""
+    from app.agents.agent_state import load_all_agent_states
+
+    saved = await load_all_agent_states()
+    if not saved:
+        return
+
+    for agent_id, data in saved.items():
+        _agent_states[agent_id] = AgentStatus(
+            id=agent_id,
+            name=data.get("name", agent_id),
+            role=data.get("role", AGENT_ROLES.get(agent_id, "未知")),
+            status=data.get("status", "idle"),
+            current_task=data.get("current_task") or None,
+        )
+
+    print(f"   Restored {len(saved)} agent states from Redis")
