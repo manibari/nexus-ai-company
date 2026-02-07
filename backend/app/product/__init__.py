@@ -13,7 +13,7 @@ from app.product.models import (
     UATFeedback,
     STAGE_ORDER,
 )
-from app.product.repository import ProductRepository
+from app.product.repository import ProductRepository, get_product_repo, set_product_repo
 
 __all__ = [
     "ProductItem",
@@ -23,5 +23,7 @@ __all__ = [
     "QAResult",
     "UATFeedback",
     "ProductRepository",
+    "get_product_repo",
+    "set_product_repo",
     "STAGE_ORDER",
 ]

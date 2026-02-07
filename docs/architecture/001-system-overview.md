@@ -1,7 +1,8 @@
 # 001: 系統架構總覽
 
-> **版本**: 1.0.0
-> **日期**: 2026-02-06
+> **版本**: 2.0.0
+> **日期**: 2026-02-07
+> **變更**: SQLite → PostgreSQL + Redis; Agent Orchestrator → AgentRegistry + dispatch()
 
 ---
 
@@ -29,20 +30,21 @@
 │  │                    API Layer (/api/v1)                    │   │
 │  │  - GET /agents          - POST /agents/{id}/action       │   │
 │  │  - GET /tasks           - POST /ceo/approve              │   │
+│  │  - GET /product         - POST /intake                   │   │
 │  │  - WS /events           - GET /dashboard/kpi             │   │
 │  └──────────────────────────────────────────────────────────┘   │
 │                              │                                   │
 │  ┌───────────────────────────┴───────────────────────────────┐  │
-│  │                     Agent Orchestrator                     │  │
-│  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐          │  │
-│  │  │  Sales  │ │   PM    │ │   Eng   │ │   QA    │  ...     │  │
-│  │  │  Agent  │ │  Agent  │ │  Agent  │ │  Agent  │          │  │
-│  │  └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘          │  │
-│  │       └───────────┴───────────┴───────────┘               │  │
+│  │          AgentRegistry + dispatch() (registry.py)         │  │
+│  │  ┌───────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐       │  │
+│  │  │GATEKEEPER │ │   PM    │ │  HUNTER  │ │   QA    │ ...   │  │
+│  │  │  Agent    │ │  Agent  │ │  Agent   │ │  Agent  │       │  │
+│  │  └─────┬─────┘ └────┬────┘ └────┬────┘ └────┬────┘       │  │
+│  │        └─────────────┴──────────┴───────────┘             │  │
 │  │                        │                                   │  │
 │  │              ┌─────────┴─────────┐                        │  │
-│  │              │    Message Bus    │                        │  │
-│  │              │  (Agent-to-Agent) │                        │  │
+│  │              │  Redis MessageBus │                        │  │
+│  │              │  (pub/sub + reply)│                        │  │
 │  │              └───────────────────┘                        │  │
 │  └───────────────────────────────────────────────────────────┘  │
 │                              │                                   │
@@ -60,13 +62,28 @@
 │  │  └─────────────────────┘    └─────────────────────────┘   │  │
 │  └───────────────────────────────────────────────────────────┘  │
 └────────────────────────────┬────────────────────────────────────┘
-                             │ SQLAlchemy ORM
+                             │ SQLAlchemy Async ORM
                              ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                      DATABASE (SQLite)                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐        │
-│  │  agents  │  │  tasks   │  │   logs   │  │  ledger  │        │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘        │
+│             DATABASE (PostgreSQL) + CACHE (Redis)                │
+│                                                                  │
+│  PostgreSQL:                                                     │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────┐             │
+│  │   agents     │ │    tasks     │ │     logs     │             │
+│  ├──────────────┤ ├──────────────┤ ├──────────────┤             │
+│  │   ledger     │ │  inbox       │ │  ceo_todos   │             │
+│  ├──────────────┤ ├──────────────┤ ├──────────────┤             │
+│  │  features    │ │ ceo_inputs   │ │agent_handoffs│             │
+│  ├──────────────┤ ├──────────────┤                               │
+│  │activity_logs │ │product_items │                               │
+│  └──────────────┘ └──────────────┘                               │
+│                                                                  │
+│  Redis:                                                          │
+│  ┌──────────────────────────────────────────────┐               │
+│  │  agent:{id}:inbox     — Agent 收件 channel    │               │
+│  │  reply:{correlation}  — Request-Reply channel │               │
+│  │  broadcast:all        — 廣播 channel          │               │
+│  └──────────────────────────────────────────────┘               │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -89,28 +106,46 @@
 └──────────────────────────────────────────────────────────┘
 ```
 
-### 2. CEO 決策流程
+### 2. CEO 決策流程 (Feature → Product Board)
 
 ```
-Agent 遇到權限不足
+CEO: "StockPulse 加 AI 選股"
         │
         ▼
-  建立 Blocking Task
-  (status: BLOCKED_USER)
+  GATEKEEPER: intent=product_feature → route_to=PM
         │
         ▼
-  推送到 CEO Inbox
-  (WebSocket event)
+  PM Agent:
+  1. Gemini 生成 PRD
+  2. 建立 Feature (AWAITING_APPROVAL)
+  3. 建立 CEO Todo (APPROVAL)
         │
         ▼
-  CEO 在前端審批
+  CEO Inbox 審核
+  ├─ approve → Feature=IN_DEVELOPMENT
+  │            → 建立 ProductItem (spec_ready)
+  │            → Activity Log: MILESTONE
+  │
+  ├─ modify  → Feature=DRAFT
+  └─ reject  → Feature=CANCELLED
         │
         ▼
-  POST /ceo/approve
-        │
-        ▼
-  解除 Blocking
-  Agent 繼續執行
+  Product Board Pipeline (Kanban):
+  spec_ready → in_progress → qa_testing → uat → done
+```
+
+### 3. Agent 通訊 (Registry + Redis)
+
+```
+intake.py → AgentRegistry.dispatch(agent_id, payload)
+                    │
+                    ▼
+            handler.handle(payload) → Dict result
+                    │
+                    ▼
+            Redis MessageBus (async pub/sub)
+            Channel: agent:{id}:inbox
+            Reply:   reply:{correlation_id}
 ```
 
 ---
@@ -120,14 +155,18 @@ Agent 遇到權限不足
 | 模組 | 路徑 | 職責 |
 |------|------|------|
 | API Layer | `backend/app/api/` | 處理 HTTP/WebSocket 請求 |
-| Agent Classes | `backend/app/agents/` | 各 Agent 的思考邏輯 (GATEKEEPER, HUNTER, ORCHESTRATOR) |
+| AgentRegistry | `backend/app/agents/registry.py` | Agent 註冊 + dispatch() 統一派發 |
+| MessageBus | `backend/app/agents/message_bus.py` | Redis pub/sub Agent 間通訊 |
+| Agent Base | `backend/app/agents/base.py` | Sense-Think-Act 基底 + DB 方法 |
+| Agent Classes | `backend/app/agents/` | GATEKEEPER, HUNTER, PM, etc. |
 | Sales Pipeline | `backend/app/pipeline/` | 商機管理 (Opportunity, Contact, Activity, MEDDIC) |
 | Project Goals | `backend/app/goals/` | 專案管理 (Goal, Phase, Checkpoint) |
 | Product Board | `backend/app/product/` | 產品開發 (ProductItem, P1-P6 Stages, QA/UAT) |
 | Knowledge Base | `backend/app/knowledge/` | 知識庫 (KnowledgeCard, Search, Tags) |
 | Engines | `backend/app/engines/` | 能力層 (MEDDIC, NLP, Enrichment) |
 | LLM Providers | `backend/app/llm/` | 抽象化 LLM 調用 |
-| Database | `backend/app/db/` | SQLAlchemy Models |
+| Database | `backend/app/db/` | SQLAlchemy Async Models + PostgreSQL |
+| Activity Log | `backend/app/agents/activity_log.py` | Agent 活動記錄 (PostgreSQL) |
 
 ---
 
@@ -154,3 +193,4 @@ Agent 遇到權限不足
 
 - [ADR-001-tech-stack.md](../decisions/ADR-001-tech-stack.md)
 - [002-llm-abstraction.md](./002-llm-abstraction.md)
+- [003-agent-communication.md](./003-agent-communication.md)

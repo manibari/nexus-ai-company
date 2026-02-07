@@ -252,6 +252,60 @@ class Feature(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class ProductItemDB(Base):
+    """產品項目（Product Board Pipeline）"""
+    __tablename__ = "product_items"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    title: Mapped[str] = mapped_column(String(500))
+    description: Mapped[str] = mapped_column(Text, default="")
+
+    # 分類
+    type: Mapped[str] = mapped_column(String(30), default="feature")
+    priority: Mapped[str] = mapped_column(String(20), default="medium")
+
+    # Pipeline 階段
+    stage: Mapped[str] = mapped_column(String(30), default="backlog")
+    stage_entered_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # 版本
+    version: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    target_release: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 規格
+    spec_doc: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    acceptance_criteria: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # 指派
+    assignee: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    owner: Mapped[str] = mapped_column(String(50), default="ORCHESTRATOR")
+
+    # QA / UAT (JSON arrays)
+    qa_results: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    uat_feedback: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # 時間
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # 預估
+    estimated_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    actual_hours: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+    # 阻擋
+    blocked_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    blocked_by: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 來源回溯
+    source_input_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    related_opportunity_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 備註
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tags: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+
 class CeoInput(Base):
     """CEO 輸入歷史"""
     __tablename__ = "ceo_inputs"

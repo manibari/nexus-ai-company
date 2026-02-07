@@ -14,11 +14,10 @@ from app.product.models import (
     ProductPriority,
     ProductType,
 )
-from app.product.repository import ProductRepository
+from app.product.repository import get_product_repo
 
 
 router = APIRouter()
-_repo = ProductRepository()
 
 
 # === Request Models ===
@@ -93,7 +92,7 @@ async def create_product(request: ProductCreate):
         estimated_hours=request.estimated_hours,
         tags=request.tags or [],
     )
-    await _repo.create(product)
+    await get_product_repo().create(product)
     return product.to_dict()
 
 
@@ -107,7 +106,7 @@ async def list_products(
     limit: int = 100,
 ):
     """列出產品項目"""
-    products = await _repo.list(
+    products = await get_product_repo().list(
         stage=ProductStage(stage) if stage else None,
         product_type=ProductType(type) if type else None,
         priority=ProductPriority(priority) if priority else None,
@@ -121,25 +120,25 @@ async def list_products(
 @router.get("/dashboard", response_model=Dict[str, Any])
 async def get_dashboard():
     """取得儀表板摘要"""
-    return _repo.get_dashboard()
+    return await get_product_repo().get_dashboard()
 
 
 @router.get("/roadmap", response_model=Dict[str, List[Dict[str, Any]]])
 async def get_roadmap():
     """取得版本 Roadmap"""
-    return _repo.get_roadmap()
+    return await get_product_repo().get_roadmap()
 
 
 @router.get("/statistics", response_model=Dict[str, Any])
 async def get_statistics():
     """取得統計資訊"""
-    return _repo.get_statistics()
+    return await get_product_repo().get_statistics()
 
 
 @router.get("/{product_id}", response_model=Dict[str, Any])
 async def get_product(product_id: str):
     """取得產品詳情"""
-    product = await _repo.get(product_id)
+    product = await get_product_repo().get(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     return product.to_dict()
@@ -148,7 +147,7 @@ async def get_product(product_id: str):
 @router.put("/{product_id}", response_model=Dict[str, Any])
 async def update_product(product_id: str, request: ProductUpdate):
     """更新產品"""
-    product = await _repo.get(product_id)
+    product = await get_product_repo().get(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
@@ -177,14 +176,14 @@ async def update_product(product_id: str, request: ProductUpdate):
     if request.tags is not None:
         product.tags = request.tags
 
-    await _repo.update(product)
+    await get_product_repo().update(product)
     return product.to_dict()
 
 
 @router.delete("/{product_id}")
 async def delete_product(product_id: str):
     """刪除產品"""
-    success = await _repo.delete(product_id)
+    success = await get_product_repo().delete(product_id)
     if not success:
         raise HTTPException(status_code=404, detail="Product not found")
     return {"status": "deleted", "id": product_id}
@@ -193,7 +192,7 @@ async def delete_product(product_id: str):
 @router.post("/{product_id}/advance", response_model=Dict[str, Any])
 async def advance_stage(product_id: str):
     """推進到下一階段"""
-    product = await _repo.get(product_id)
+    product = await get_product_repo().get(product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
@@ -212,7 +211,7 @@ async def advance_stage(product_id: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Cannot advance from blocked state")
 
-    result = await _repo.advance_stage(product_id)
+    result = await get_product_repo().advance_stage(product_id)
     if not result:
         raise HTTPException(status_code=400, detail="Failed to advance stage")
     return result.to_dict()
@@ -226,7 +225,7 @@ async def set_stage(product_id: str, stage: str):
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid stage: {stage}")
 
-    result = await _repo.set_stage(product_id, target_stage)
+    result = await get_product_repo().set_stage(product_id, target_stage)
     if not result:
         raise HTTPException(status_code=400, detail="Cannot set to this stage")
     return result.to_dict()
@@ -235,7 +234,7 @@ async def set_stage(product_id: str, stage: str):
 @router.post("/{product_id}/assign", response_model=Dict[str, Any])
 async def assign_product(product_id: str, request: AssignRequest):
     """指派 Agent"""
-    result = await _repo.assign(product_id, request.assignee)
+    result = await get_product_repo().assign(product_id, request.assignee)
     if not result:
         raise HTTPException(status_code=404, detail="Product not found")
     return result.to_dict()
@@ -244,7 +243,7 @@ async def assign_product(product_id: str, request: AssignRequest):
 @router.post("/{product_id}/qa", response_model=Dict[str, Any])
 async def add_qa_result(product_id: str, request: QAResultRequest):
     """新增 QA 測試結果"""
-    result = await _repo.add_qa_result(
+    result = await get_product_repo().add_qa_result(
         product_id,
         test_name=request.test_name,
         passed=request.passed,
@@ -258,7 +257,7 @@ async def add_qa_result(product_id: str, request: QAResultRequest):
 @router.post("/{product_id}/uat", response_model=Dict[str, Any])
 async def add_uat_feedback(product_id: str, request: UATFeedbackRequest):
     """新增 UAT 回饋"""
-    result = await _repo.add_uat_feedback(
+    result = await get_product_repo().add_uat_feedback(
         product_id,
         feedback=request.feedback,
         approved=request.approved,
@@ -271,7 +270,7 @@ async def add_uat_feedback(product_id: str, request: UATFeedbackRequest):
 @router.post("/{product_id}/block", response_model=Dict[str, Any])
 async def block_product(product_id: str, request: BlockRequest):
     """標記為阻擋"""
-    result = await _repo.block(
+    result = await get_product_repo().block(
         product_id,
         reason=request.reason,
         blocked_by=request.blocked_by,
@@ -289,7 +288,7 @@ async def unblock_product(product_id: str, request: UnblockRequest):
     except ValueError:
         raise HTTPException(status_code=400, detail=f"Invalid stage: {request.return_to_stage}")
 
-    result = await _repo.unblock(product_id, return_stage)
+    result = await get_product_repo().unblock(product_id, return_stage)
     if not result:
         raise HTTPException(status_code=400, detail="Product not found or not blocked")
     return result.to_dict()

@@ -1,11 +1,14 @@
 """
 Product Repository
 
-In-memory repository for Product items (Tracer Bullet version)
+SQLAlchemy-backed repository for Product items.
 """
 
+import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy import select
 
 from app.product.models import (
     ProductItem,
@@ -17,33 +20,185 @@ from app.product.models import (
     STAGE_ORDER,
 )
 
+logger = logging.getLogger(__name__)
+
+
+# === Global accessor ===
+_product_repo: Optional["ProductRepository"] = None
+
+
+def get_product_repo() -> "ProductRepository":
+    """取得共享的 ProductRepository 實例"""
+    global _product_repo
+    if _product_repo is None:
+        from app.db.database import AsyncSessionLocal
+        _product_repo = ProductRepository(session_factory=AsyncSessionLocal)
+    return _product_repo
+
+
+def set_product_repo(repo: "ProductRepository") -> None:
+    """設定共享的 ProductRepository 實例（用於測試注入）"""
+    global _product_repo
+    _product_repo = repo
+
+
+# === Domain ↔ DB Converters ===
+
+def _domain_to_db(product: ProductItem) -> "ProductItemDB":
+    """ProductItem dataclass → ProductItemDB ORM"""
+    from app.db.models import ProductItemDB
+    return ProductItemDB(
+        id=product.id,
+        title=product.title,
+        description=product.description,
+        type=product.type.value,
+        priority=product.priority.value,
+        stage=product.stage.value,
+        stage_entered_at=product.stage_entered_at,
+        version=product.version,
+        target_release=product.target_release,
+        spec_doc=product.spec_doc,
+        acceptance_criteria=product.acceptance_criteria,
+        assignee=product.assignee,
+        owner=product.owner,
+        qa_results=[r.to_dict() for r in product.qa_results] if product.qa_results else [],
+        uat_feedback=[f.to_dict() for f in product.uat_feedback] if product.uat_feedback else [],
+        created_at=product.created_at,
+        started_at=product.started_at,
+        completed_at=product.completed_at,
+        estimated_hours=product.estimated_hours,
+        actual_hours=product.actual_hours,
+        blocked_reason=product.blocked_reason,
+        blocked_by=product.blocked_by,
+        source_input_id=product.source_input_id,
+        related_opportunity_id=product.related_opportunity_id,
+        notes=product.notes,
+        tags=product.tags,
+    )
+
+
+def _db_to_domain(row) -> ProductItem:
+    """ProductItemDB ORM → ProductItem dataclass"""
+    # Deserialize QA results
+    qa_results = []
+    for r in (row.qa_results or []):
+        qa_results.append(QAResult(
+            test_name=r.get("test_name", ""),
+            passed=r.get("passed", False),
+            details=r.get("details"),
+            timestamp=datetime.fromisoformat(r["timestamp"]) if r.get("timestamp") else datetime.utcnow(),
+        ))
+
+    # Deserialize UAT feedback
+    uat_feedback = []
+    for f in (row.uat_feedback or []):
+        uat_feedback.append(UATFeedback(
+            feedback=f.get("feedback", ""),
+            from_ceo=f.get("from_ceo", True),
+            approved=f.get("approved"),
+            timestamp=datetime.fromisoformat(f["timestamp"]) if f.get("timestamp") else datetime.utcnow(),
+        ))
+
+    return ProductItem(
+        id=row.id,
+        title=row.title,
+        description=row.description or "",
+        type=ProductType(row.type) if row.type else ProductType.FEATURE,
+        priority=ProductPriority(row.priority) if row.priority else ProductPriority.MEDIUM,
+        stage=ProductStage(row.stage) if row.stage else ProductStage.P1_BACKLOG,
+        stage_entered_at=row.stage_entered_at or datetime.utcnow(),
+        version=row.version,
+        target_release=row.target_release,
+        spec_doc=row.spec_doc,
+        acceptance_criteria=row.acceptance_criteria or [],
+        assignee=row.assignee,
+        owner=row.owner or "ORCHESTRATOR",
+        qa_results=qa_results,
+        uat_feedback=uat_feedback,
+        created_at=row.created_at or datetime.utcnow(),
+        started_at=row.started_at,
+        completed_at=row.completed_at,
+        estimated_hours=row.estimated_hours,
+        actual_hours=row.actual_hours,
+        blocked_reason=row.blocked_reason,
+        blocked_by=row.blocked_by,
+        source_input_id=row.source_input_id,
+        related_opportunity_id=row.related_opportunity_id,
+        notes=row.notes,
+        tags=row.tags or [],
+    )
+
 
 class ProductRepository:
-    """In-memory repository for product items"""
+    """SQLAlchemy-backed repository for product items"""
 
-    def __init__(self):
-        self._products: Dict[str, ProductItem] = {}
+    def __init__(self, session_factory=None):
+        self._session_factory = session_factory
+
+    def _session(self):
+        return self._session_factory()
 
     async def create(self, product: ProductItem) -> ProductItem:
         """Create a new product item"""
-        self._products[product.id] = product
+        from app.db.models import ProductItemDB
+        async with self._session() as session:
+            db_item = _domain_to_db(product)
+            session.add(db_item)
+            await session.commit()
+        logger.info(f"Created product item: {product.id}")
         return product
 
     async def get(self, product_id: str) -> Optional[ProductItem]:
         """Get a product item by ID"""
-        return self._products.get(product_id)
+        from app.db.models import ProductItemDB
+        async with self._session() as session:
+            row = await session.get(ProductItemDB, product_id)
+            return _db_to_domain(row) if row else None
 
     async def update(self, product: ProductItem) -> ProductItem:
         """Update a product item"""
-        self._products[product.id] = product
+        from app.db.models import ProductItemDB
+        async with self._session() as session:
+            row = await session.get(ProductItemDB, product.id)
+            if not row:
+                raise ValueError(f"ProductItem {product.id} not found")
+            row.title = product.title
+            row.description = product.description
+            row.type = product.type.value
+            row.priority = product.priority.value
+            row.stage = product.stage.value
+            row.stage_entered_at = product.stage_entered_at
+            row.version = product.version
+            row.target_release = product.target_release
+            row.spec_doc = product.spec_doc
+            row.acceptance_criteria = product.acceptance_criteria
+            row.assignee = product.assignee
+            row.owner = product.owner
+            row.qa_results = [r.to_dict() for r in product.qa_results]
+            row.uat_feedback = [f.to_dict() for f in product.uat_feedback]
+            row.started_at = product.started_at
+            row.completed_at = product.completed_at
+            row.estimated_hours = product.estimated_hours
+            row.actual_hours = product.actual_hours
+            row.blocked_reason = product.blocked_reason
+            row.blocked_by = product.blocked_by
+            row.source_input_id = product.source_input_id
+            row.related_opportunity_id = product.related_opportunity_id
+            row.notes = product.notes
+            row.tags = product.tags
+            await session.commit()
         return product
 
     async def delete(self, product_id: str) -> bool:
         """Delete a product item"""
-        if product_id in self._products:
-            del self._products[product_id]
+        from app.db.models import ProductItemDB
+        async with self._session() as session:
+            row = await session.get(ProductItemDB, product_id)
+            if not row:
+                return False
+            await session.delete(row)
+            await session.commit()
             return True
-        return False
 
     async def list(
         self,
@@ -55,33 +210,35 @@ class ProductRepository:
         limit: int = 100,
     ) -> List[ProductItem]:
         """List product items with optional filters"""
-        results = list(self._products.values())
+        from app.db.models import ProductItemDB
+        async with self._session() as session:
+            stmt = select(ProductItemDB)
 
-        if stage:
-            results = [p for p in results if p.stage == stage]
+            if stage:
+                stmt = stmt.where(ProductItemDB.stage == stage.value)
+            if product_type:
+                stmt = stmt.where(ProductItemDB.type == product_type.value)
+            if priority:
+                stmt = stmt.where(ProductItemDB.priority == priority.value)
+            if assignee:
+                stmt = stmt.where(ProductItemDB.assignee == assignee)
+            if version:
+                stmt = stmt.where(ProductItemDB.target_release == version)
 
-        if product_type:
-            results = [p for p in results if p.type == product_type]
+            stmt = stmt.order_by(ProductItemDB.created_at).limit(limit)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
 
-        if priority:
-            results = [p for p in results if p.priority == priority]
-
-        if assignee:
-            results = [p for p in results if p.assignee == assignee]
-
-        if version:
-            results = [p for p in results if p.target_release == version]
-
-        # Sort by priority (critical first), then by created_at (oldest first)
+        # Convert to domain and sort by priority
+        products = [_db_to_domain(r) for r in rows]
         priority_order = {
             ProductPriority.CRITICAL: 0,
             ProductPriority.HIGH: 1,
             ProductPriority.MEDIUM: 2,
             ProductPriority.LOW: 3,
         }
-        results.sort(key=lambda p: (priority_order.get(p.priority, 4), p.created_at))
-
-        return results[:limit]
+        products.sort(key=lambda p: (priority_order.get(p.priority, 4), p.created_at))
+        return products
 
     async def advance_stage(self, product_id: str) -> Optional[ProductItem]:
         """Advance product to next stage"""
@@ -195,9 +352,9 @@ class ProductRepository:
         await self.update(product)
         return product
 
-    def get_dashboard(self) -> Dict[str, Any]:
+    async def get_dashboard(self) -> Dict[str, Any]:
         """Get dashboard summary"""
-        products = list(self._products.values())
+        products = await self.list(limit=10000)
 
         # Count by stage
         stage_counts = {stage.value: 0 for stage in ProductStage}
@@ -235,9 +392,9 @@ class ProductRepository:
             "stale_items": [p.to_summary() for p in stale],
         }
 
-    def get_roadmap(self) -> Dict[str, List[Dict[str, Any]]]:
+    async def get_roadmap(self) -> Dict[str, List[Dict[str, Any]]]:
         """Get roadmap grouped by target release version"""
-        products = list(self._products.values())
+        products = await self.list(limit=10000)
 
         roadmap: Dict[str, List[Dict[str, Any]]] = {}
 
@@ -254,9 +411,9 @@ class ProductRepository:
 
         return sorted_roadmap
 
-    def get_statistics(self) -> Dict[str, Any]:
+    async def get_statistics(self) -> Dict[str, Any]:
         """Get detailed statistics"""
-        products = list(self._products.values())
+        products = await self.list(limit=10000)
 
         completed = [p for p in products if p.stage == ProductStage.P6_DONE]
 

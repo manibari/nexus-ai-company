@@ -745,7 +745,7 @@ User Story:
         return {"error": f"Unknown action: {action}"}
 
     async def _assign_to_developer(self, feature: FeatureRequest) -> Dict[str, Any]:
-        """分派給 DEVELOPER Agent"""
+        """分派給 DEVELOPER Agent，並建立 ProductItem 進入 Product Board"""
         feature.status = FeatureStatus.IN_DEVELOPMENT
         feature.assigned_to = "DEVELOPER"
         await self.feature_repo.update(feature)
@@ -770,7 +770,90 @@ User Story:
 
         logger.info(f"Assigned {feature.id} to DEVELOPER: {task['id']}")
 
+        # === Feature → ProductItem Bridge ===
+        product_item = await self._create_product_item(feature)
+        if product_item:
+            task["product_item_id"] = product_item.id
+
         return task
+
+    async def _create_product_item(self, feature: FeatureRequest) -> Optional[Any]:
+        """從 Feature 建立 ProductItem，放入 Product Board Pipeline"""
+        from app.product.repository import get_product_repo
+        from app.product.models import (
+            ProductItem,
+            ProductStage,
+            ProductPriority,
+            ProductType,
+        )
+
+        try:
+            repo = get_product_repo()
+
+            # Priority 對應: Feature P0~P3 → ProductItem critical~low
+            priority_map = {
+                FeaturePriority.P0_CRITICAL: ProductPriority.CRITICAL,
+                FeaturePriority.P1_HIGH: ProductPriority.HIGH,
+                FeaturePriority.P2_MEDIUM: ProductPriority.MEDIUM,
+                FeaturePriority.P3_LOW: ProductPriority.LOW,
+            }
+
+            # 組合 spec_doc (PRD summary + technical + UI requirements)
+            spec_parts = []
+            if feature.prd_summary:
+                spec_parts.append(f"## PRD Summary\n{feature.prd_summary}")
+            if feature.technical_requirements:
+                spec_parts.append(
+                    "## Technical Requirements\n"
+                    + "\n".join(f"- {r}" for r in feature.technical_requirements)
+                )
+            if feature.ui_requirements:
+                spec_parts.append(
+                    "## UI Requirements\n"
+                    + "\n".join(f"- {r}" for r in feature.ui_requirements)
+                )
+            spec_doc = "\n\n".join(spec_parts) if spec_parts else None
+
+            product_item = ProductItem(
+                id="",  # auto-generate PROD-2026-XXXX
+                title=feature.title,
+                description=feature.description,
+                type=ProductType.FEATURE,
+                priority=priority_map.get(feature.priority, ProductPriority.MEDIUM),
+                stage=ProductStage.P2_SPEC_READY,  # PRD 已完成，跳過 backlog
+                spec_doc=spec_doc,
+                acceptance_criteria=feature.acceptance_criteria,
+                assignee="DEVELOPER",
+                estimated_hours=feature.estimated_days * 8 if feature.estimated_days else None,
+                source_input_id=feature.id,  # 回溯連結
+                tags=[feature.project_name] if feature.project_name else [],
+            )
+
+            await repo.create(product_item)
+            logger.info(
+                f"Created ProductItem {product_item.id} from Feature {feature.id} (spec_ready)"
+            )
+
+            # Activity Log: MILESTONE
+            activity_repo = get_activity_repo()
+            await activity_repo.log(
+                agent_id="PM",
+                agent_name="Product Manager",
+                activity_type=ActivityType.MILESTONE,
+                message=f"Feature {feature.id} → ProductItem {product_item.id} (spec_ready)",
+                project_name=feature.project_name,
+                metadata={
+                    "feature_id": feature.id,
+                    "product_item_id": product_item.id,
+                    "stage": "spec_ready",
+                },
+            )
+
+            return product_item
+
+        except Exception as e:
+            logger.error(f"Failed to create ProductItem from Feature {feature.id}: {e}")
+            return None
 
     async def get_feature(self, feature_id: str) -> Optional[Dict[str, Any]]:
         """取得功能需求詳情"""
