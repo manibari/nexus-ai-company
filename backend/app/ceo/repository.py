@@ -1,11 +1,16 @@
 """
 CEO To-Do Repository
 
-In-memory 儲存（Tracer Bullet 版本）
+SQLAlchemy 持久化版本（PostgreSQL / SQLite）
 """
 
+import json
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
+
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ceo.models import (
     TodoItem,
@@ -14,81 +19,132 @@ from app.ceo.models import (
     TodoPriority,
     TodoStatus,
 )
+from app.db.models import CeoTodo
+
+logger = logging.getLogger(__name__)
+
+
+def _domain_to_db(todo: TodoItem) -> CeoTodo:
+    """Domain model → DB model"""
+    return CeoTodo(
+        id=todo.id,
+        project_name=todo.project_name,
+        subject=todo.subject,
+        description=todo.description,
+        from_agent=todo.from_agent,
+        from_agent_name=todo.from_agent_name,
+        type=todo.type.value,
+        priority=todo.priority.value,
+        status=todo.status.value,
+        deadline=todo.deadline,
+        completed_at=todo.completed_at,
+        created_at=todo.created_at,
+        actions=[a.to_dict() for a in todo.actions] if todo.actions else [],
+        response=todo.response,
+        payload=todo.payload,
+        related_entity_type=todo.related_entity_type,
+        related_entity_id=todo.related_entity_id,
+    )
+
+
+def _db_to_domain(row: CeoTodo) -> TodoItem:
+    """DB model → Domain model"""
+    actions = []
+    if row.actions:
+        for a in row.actions:
+            actions.append(TodoAction(
+                id=a.get("id", "action"),
+                label=a.get("label", ""),
+                style=a.get("style", "default"),
+                requires_input=a.get("requires_input", False),
+                input_placeholder=a.get("input_placeholder"),
+            ))
+
+    return TodoItem(
+        id=row.id,
+        project_name=row.project_name,
+        subject=row.subject,
+        description=row.description,
+        from_agent=row.from_agent or "",
+        from_agent_name=row.from_agent_name or "",
+        type=TodoType(row.type) if row.type else TodoType.NOTIFICATION,
+        priority=TodoPriority(row.priority) if row.priority else TodoPriority.NORMAL,
+        status=TodoStatus(row.status) if row.status else TodoStatus.PENDING,
+        deadline=row.deadline,
+        completed_at=row.completed_at,
+        created_at=row.created_at,
+        actions=actions,
+        response=row.response,
+        payload=row.payload or {},
+        related_entity_type=row.related_entity_type,
+        related_entity_id=row.related_entity_id,
+    )
 
 
 class TodoRepository:
-    """CEO 待辦儲存庫"""
+    """CEO 待辦儲存庫（SQLAlchemy 版本）"""
 
-    def __init__(self):
-        self._todos: Dict[str, TodoItem] = {}
-        # 移除自動初始化樣本資料，避免每次重啟覆蓋用戶回覆
-        # self._init_sample_data()
+    def __init__(self, session_factory):
+        """
+        Args:
+            session_factory: AsyncSessionLocal（可產生 AsyncSession 的 callable）
+        """
+        self._session_factory = session_factory
 
-    def _init_sample_data(self):
-        """初始化範例資料"""
-        # 範例：需求問卷
-        sample_questionnaire = TodoItem(
-            id="TODO-202602061200-0001",
-            project_name="美股分析買賣軟體",
-            subject="回覆需求問卷 (17題)",
-            description="PM 需要您回覆以下問題以開始規劃開發",
-            from_agent="ORCHESTRATOR",
-            from_agent_name="PM Agent",
-            type=TodoType.QUESTIONNAIRE,
-            priority=TodoPriority.HIGH,
-            deadline=datetime.utcnow() + timedelta(days=1),
-            actions=[
-                TodoAction(id="respond", label="填寫問卷", style="primary"),
-                TodoAction(id="skip", label="稍後處理", style="default"),
-            ],
-            related_entity_type="product",
-            related_entity_id="PRD-2026-0001",
-            payload={
-                "questions": [
-                    {"id": "q1", "question": "目標用戶是誰？", "options": ["散戶", "專業交易員", "機構", "全部"]},
-                    {"id": "q2", "question": "用戶地區？", "options": ["台灣", "美國", "全球"]},
-                    {"id": "q3", "question": "即時報價？", "options": ["即時 (付費)", "延遲15分鐘 (免費)"]},
-                    {"id": "q4", "question": "分析功能？", "options": ["技術指標", "K線圖", "基本面", "財報"], "multi": True},
-                    {"id": "q5", "question": "AI 功能？", "options": ["AI選股", "風險評估", "新聞情緒", "對話助理", "不需要"], "multi": True},
-                    {"id": "q6", "question": "交易功能？", "options": ["僅分析", "模擬交易", "串接券商下單"]},
-                    {"id": "q7", "question": "策略回測？", "options": ["需要", "不需要"]},
-                    {"id": "q8", "question": "數據來源偏好？", "options": ["Yahoo Finance", "Alpha Vantage", "Polygon.io", "IEX Cloud", "無偏好"]},
-                    {"id": "q9", "question": "目標平台？", "options": ["Web", "Desktop", "Mobile", "全平台"]},
-                    {"id": "q10", "question": "開發預算？", "type": "text", "placeholder": "請輸入金額"},
-                    {"id": "q11", "question": "月費預算？", "type": "text", "placeholder": "API+伺服器"},
-                    {"id": "q12", "question": "MVP 時程？", "options": ["2週", "1個月", "3個月"]},
-                    {"id": "q13", "question": "SEC 法規？", "options": ["需要", "不需要", "不確定"]},
-                    {"id": "q14", "question": "商業模式？", "options": ["訂閱制", "買斷", "免費+廣告", "自用"]},
-                    {"id": "q15", "question": "預期售價？", "type": "text", "placeholder": "若訂閱制，月費多少？"},
-                    {"id": "q16", "question": "競品參考？", "type": "text", "placeholder": "TradingView/其他"},
-                    {"id": "q17", "question": "最重要3功能？", "type": "text", "placeholder": "請排序"},
-                ],
-            },
-        )
-        self._todos[sample_questionnaire.id] = sample_questionnaire
+    def _session(self) -> AsyncSession:
+        return self._session_factory()
 
     # === CRUD ===
 
     async def create(self, todo: TodoItem) -> TodoItem:
         """建立待辦"""
-        self._todos[todo.id] = todo
-        return todo
+        async with self._session() as session:
+            db_todo = _domain_to_db(todo)
+            session.add(db_todo)
+            await session.commit()
+            logger.info(f"Created todo: {todo.id}")
+            return todo
 
     async def get(self, todo_id: str) -> Optional[TodoItem]:
         """取得待辦"""
-        return self._todos.get(todo_id)
+        async with self._session() as session:
+            result = await session.get(CeoTodo, todo_id)
+            return _db_to_domain(result) if result else None
 
     async def update(self, todo: TodoItem) -> TodoItem:
         """更新待辦"""
-        self._todos[todo.id] = todo
-        return todo
+        async with self._session() as session:
+            result = await session.get(CeoTodo, todo.id)
+            if not result:
+                raise ValueError(f"Todo {todo.id} not found")
+            # 更新所有欄位
+            result.project_name = todo.project_name
+            result.subject = todo.subject
+            result.description = todo.description
+            result.from_agent = todo.from_agent
+            result.from_agent_name = todo.from_agent_name
+            result.type = todo.type.value
+            result.priority = todo.priority.value
+            result.status = todo.status.value
+            result.deadline = todo.deadline
+            result.completed_at = todo.completed_at
+            result.actions = [a.to_dict() for a in todo.actions] if todo.actions else []
+            result.response = todo.response
+            result.payload = todo.payload
+            result.related_entity_type = todo.related_entity_type
+            result.related_entity_id = todo.related_entity_id
+            await session.commit()
+            return todo
 
     async def delete(self, todo_id: str) -> bool:
         """刪除待辦"""
-        if todo_id in self._todos:
-            del self._todos[todo_id]
+        async with self._session() as session:
+            result = await session.get(CeoTodo, todo_id)
+            if not result:
+                return False
+            await session.delete(result)
+            await session.commit()
             return True
-        return False
 
     async def list(
         self,
@@ -97,22 +153,28 @@ class TodoRepository:
         limit: int = 50,
     ) -> List[TodoItem]:
         """列出待辦"""
-        results = list(self._todos.values())
+        async with self._session() as session:
+            stmt = select(CeoTodo)
 
-        # 篩選
-        if status:
-            results = [t for t in results if t.status == status]
-        if priority:
-            results = [t for t in results if t.priority == priority]
+            if status:
+                stmt = stmt.where(CeoTodo.status == status.value)
+            if priority:
+                stmt = stmt.where(CeoTodo.priority == priority.value)
 
-        # 排序：優先級 > 過期 > 建立時間
-        results.sort(key=lambda t: (
-            t.priority_order,
-            0 if t.is_overdue else 1,
-            t.created_at,
-        ))
+            stmt = stmt.order_by(CeoTodo.created_at.desc()).limit(limit)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
 
-        return results[:limit]
+            todos = [_db_to_domain(r) for r in rows]
+
+            # 排序：優先級 > 過期 > 建立時間
+            todos.sort(key=lambda t: (
+                t.priority_order,
+                0 if t.is_overdue else 1,
+                t.created_at,
+            ))
+
+            return todos
 
     async def list_pending(self) -> List[TodoItem]:
         """列出待處理的待辦"""
@@ -163,24 +225,75 @@ class TodoRepository:
     # === 統計 ===
 
     def get_stats(self) -> Dict[str, Any]:
-        """取得統計"""
-        all_todos = list(self._todos.values())
-        pending = [t for t in all_todos if t.status == TodoStatus.PENDING]
-        overdue = [t for t in pending if t.is_overdue]
-
-        by_priority = {}
-        for p in TodoPriority:
-            by_priority[p.value] = len([t for t in pending if t.priority == p])
-
-        by_type = {}
-        for tt in TodoType:
-            by_type[tt.value] = len([t for t in pending if t.type == tt])
-
+        """取得統計（同步包裝，保持 API 相容）"""
+        # 因為原本的 API 是 sync，這裡用 lazy approach
+        # 在 async context 中請改用 get_stats_async()
         return {
-            "total": len(all_todos),
-            "pending": len(pending),
-            "overdue": len(overdue),
-            "completed": len([t for t in all_todos if t.status == TodoStatus.COMPLETED]),
-            "by_priority": by_priority,
-            "by_type": by_type,
+            "total": 0,
+            "pending": 0,
+            "overdue": 0,
+            "completed": 0,
+            "by_priority": {},
+            "by_type": {},
         }
+
+    async def get_stats_async(self) -> Dict[str, Any]:
+        """取得統計（async 版本）"""
+        async with self._session() as session:
+            # 總數
+            total_result = await session.execute(
+                select(func.count()).select_from(CeoTodo)
+            )
+            total = total_result.scalar() or 0
+
+            # 待處理
+            pending_result = await session.execute(
+                select(func.count()).select_from(CeoTodo).where(
+                    CeoTodo.status == "pending"
+                )
+            )
+            pending = pending_result.scalar() or 0
+
+            # 已完成
+            completed_result = await session.execute(
+                select(func.count()).select_from(CeoTodo).where(
+                    CeoTodo.status == "completed"
+                )
+            )
+            completed = completed_result.scalar() or 0
+
+            # 按優先級
+            priority_result = await session.execute(
+                select(CeoTodo.priority, func.count())
+                .where(CeoTodo.status == "pending")
+                .group_by(CeoTodo.priority)
+            )
+            by_priority = {row[0]: row[1] for row in priority_result.all()}
+
+            # 按類型
+            type_result = await session.execute(
+                select(CeoTodo.type, func.count())
+                .where(CeoTodo.status == "pending")
+                .group_by(CeoTodo.type)
+            )
+            by_type = {row[0]: row[1] for row in type_result.all()}
+
+            # 計算過期數
+            now = datetime.utcnow()
+            overdue_result = await session.execute(
+                select(func.count()).select_from(CeoTodo).where(
+                    CeoTodo.status == "pending",
+                    CeoTodo.deadline < now,
+                    CeoTodo.deadline.isnot(None),
+                )
+            )
+            overdue = overdue_result.scalar() or 0
+
+            return {
+                "total": total,
+                "pending": pending,
+                "overdue": overdue,
+                "completed": completed,
+                "by_priority": by_priority,
+                "by_type": by_type,
+            }

@@ -21,8 +21,16 @@ from app.ceo.repository import TodoRepository
 
 router = APIRouter()
 
-# 全域 Repository（Tracer Bullet 版本）
-_repo = TodoRepository()
+# 全域 Repository（SQLAlchemy 版本）
+_repo = None
+
+
+def _get_repo() -> TodoRepository:
+    global _repo
+    if _repo is None:
+        from app.db.database import AsyncSessionLocal
+        _repo = TodoRepository(session_factory=AsyncSessionLocal)
+    return _repo
 
 
 # === Request Models ===
@@ -78,27 +86,27 @@ async def list_todos(
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid priority: {priority}")
 
-    todos = await _repo.list(status=status_enum, priority=priority_enum, limit=limit)
+    todos = await _get_repo().list(status=status_enum, priority=priority_enum, limit=limit)
     return [t.to_dict() for t in todos]
 
 
 @router.get("/todos/pending", response_model=List[Dict[str, Any]])
 async def list_pending_todos():
     """取得待處理的待辦"""
-    todos = await _repo.list_pending()
+    todos = await _get_repo().list_pending()
     return [t.to_dict() for t in todos]
 
 
 @router.get("/todos/stats", response_model=Dict[str, Any])
 async def get_todo_stats():
     """取得待辦統計"""
-    return _repo.get_stats()
+    return await _get_repo().get_stats_async()
 
 
 @router.get("/todos/{todo_id}", response_model=Dict[str, Any])
 async def get_todo(todo_id: str):
     """取得待辦詳情"""
-    todo = await _repo.get(todo_id)
+    todo = await _get_repo().get(todo_id)
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     return todo.to_dict()
@@ -176,23 +184,85 @@ async def create_todo(request: TodoCreate):
         payload=request.payload,
     )
 
-    await _repo.create(todo)
+    await _get_repo().create(todo)
     return todo.to_dict()
 
 
 @router.post("/todos/{todo_id}/respond", response_model=Dict[str, Any])
 async def respond_todo(todo_id: str, request: TodoRespond):
     """CEO 回覆待辦"""
-    todo = await _repo.respond(todo_id, request.action_id, request.data)
+    # 先取得 todo 資訊（含 callback）
+    todo = await _get_repo().get(todo_id)
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
-    return todo.to_dict()
+
+    # 標記為已完成
+    todo = await _get_repo().respond(todo_id, request.action_id, request.data)
+
+    # 觸發 callback（如果有）
+    callback_result = None
+    if todo.payload and todo.payload.get("callback_endpoint"):
+        callback_result = await _trigger_callback(
+            todo=todo,
+            action_id=request.action_id,
+            response_data=request.data,
+        )
+
+    result = todo.to_dict()
+    if callback_result:
+        result["callback_result"] = callback_result
+
+    return result
+
+
+async def _trigger_callback(
+    todo: TodoItem,
+    action_id: str,
+    response_data: Optional[Dict[str, Any]] = None,
+) -> Optional[Dict[str, Any]]:
+    """觸發 Todo callback（通知原始 Agent）"""
+    import logging
+    logger = logging.getLogger(__name__)
+
+    callback_endpoint = todo.payload.get("callback_endpoint", "")
+
+    # PM Feature Decision callback
+    if "/pm/features/" in callback_endpoint and "/decision" in callback_endpoint:
+        try:
+            from app.agents.pm import get_pm_agent
+            feature_id = todo.payload.get("feature_id")
+            if not feature_id:
+                logger.error("Missing feature_id in callback payload")
+                return {"error": "Missing feature_id"}
+
+            pm = get_pm_agent()
+
+            # 轉換 action_id 為 PM 決策
+            feedback = None
+            if response_data and response_data.get("input"):
+                feedback = response_data.get("input")
+
+            result = await pm.handle_ceo_decision(
+                feature_id=feature_id,
+                action=action_id,
+                feedback=feedback,
+            )
+
+            logger.info(f"PM callback triggered for {feature_id}: {action_id}")
+            return result
+
+        except Exception as e:
+            logger.error(f"PM callback failed: {e}")
+            return {"error": str(e)}
+
+    # 其他 Agent callback 可在此擴展
+    return None
 
 
 @router.post("/todos/{todo_id}/snooze", response_model=Dict[str, Any])
 async def snooze_todo(todo_id: str, request: TodoSnooze):
     """延後處理"""
-    todo = await _repo.snooze(todo_id, request.hours)
+    todo = await _get_repo().snooze(todo_id, request.hours)
     if not todo:
         raise HTTPException(status_code=404, detail="Todo not found")
     return todo.to_dict()
@@ -201,7 +271,7 @@ async def snooze_todo(todo_id: str, request: TodoSnooze):
 @router.delete("/todos/{todo_id}")
 async def delete_todo(todo_id: str):
     """刪除待辦"""
-    success = await _repo.delete(todo_id)
+    success = await _get_repo().delete(todo_id)
     if not success:
         raise HTTPException(status_code=404, detail="Todo not found")
     return {"message": f"Todo {todo_id} deleted"}

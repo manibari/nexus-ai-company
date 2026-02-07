@@ -1,25 +1,34 @@
 """
 Agent Activity Log
 
-記錄 Agent 的工作活動日誌
+記錄 Agent 的工作活動日誌（SQLAlchemy 持久化版本 — PostgreSQL / SQLite）
 """
 
+import json
+import logging
+import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import List, Optional, Dict, Any
 from enum import Enum
+
+from sqlalchemy import select, func, and_
+from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 class ActivityType(Enum):
     """活動類型"""
-    TASK_START = "task_start"      # 開始任務
-    TASK_END = "task_end"          # 結束任務
+    TASK_START = "task_start"       # 開始任務
+    TASK_END = "task_end"           # 結束任務
     STATUS_CHANGE = "status_change" # 狀態變更
-    BLOCKED = "blocked"            # 遭遇阻塞
-    UNBLOCKED = "unblocked"        # 解除阻塞
-    MESSAGE = "message"            # 一般訊息
-    ERROR = "error"                # 錯誤
-    MILESTONE = "milestone"        # 里程碑
+    BLOCKED = "blocked"             # 遭遇阻塞
+    UNBLOCKED = "unblocked"         # 解除阻塞
+    MESSAGE = "message"             # 一般訊息
+    ERROR = "error"                 # 錯誤
+    MILESTONE = "milestone"         # 里程碑
+    HANDOFF = "handoff"             # Agent 互轉
 
 
 @dataclass
@@ -51,17 +60,46 @@ class ActivityEntry:
         }
 
 
+def _db_to_entry(row) -> ActivityEntry:
+    """DB model → ActivityEntry"""
+    metadata = {}
+    if row.metadata_json:
+        if isinstance(row.metadata_json, dict):
+            metadata = row.metadata_json
+        elif isinstance(row.metadata_json, str):
+            try:
+                metadata = json.loads(row.metadata_json)
+            except json.JSONDecodeError:
+                pass
+
+    return ActivityEntry(
+        id=row.id,
+        agent_id=row.agent_id,
+        agent_name=row.agent_name,
+        activity_type=ActivityType(row.activity_type),
+        message=row.message,
+        timestamp=row.timestamp,
+        project_id=row.project_id,
+        project_name=row.project_name,
+        duration_seconds=row.duration_seconds,
+        metadata=metadata,
+    )
+
+
 class ActivityLogRepository:
-    """活動日誌儲存庫"""
+    """活動日誌儲存庫（SQLAlchemy 版本）"""
 
-    def __init__(self):
-        self._logs: List[ActivityEntry] = []
-        self._counter = 0
-        self._task_starts: Dict[str, datetime] = {}  # agent_id -> start_time
+    def __init__(self, session_factory=None):
+        self._session_factory = session_factory
+        self._task_starts: Dict[str, datetime] = {}  # agent_id -> start_time（記憶體快取）
 
-    def _generate_id(self) -> str:
-        self._counter += 1
-        return f"ACT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{self._counter:04d}"
+    def _session(self) -> AsyncSession:
+        return self._session_factory()
+
+    @staticmethod
+    def _generate_id() -> str:
+        """生成唯一 ID"""
+        return f"ACT-{datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
 
     async def log(
         self,
@@ -74,6 +112,8 @@ class ActivityLogRepository:
         metadata: Optional[Dict[str, Any]] = None,
     ) -> ActivityEntry:
         """記錄活動"""
+        from app.db.models import ActivityLog
+
         duration = None
 
         # 計算任務耗時
@@ -84,23 +124,38 @@ class ActivityLogRepository:
             if start_time:
                 duration = int((datetime.utcnow() - start_time).total_seconds())
 
+        entry_id = self._generate_id()
+        now = datetime.utcnow()
+
         entry = ActivityEntry(
-            id=self._generate_id(),
+            id=entry_id,
             agent_id=agent_id,
             agent_name=agent_name,
             activity_type=activity_type,
             message=message,
+            timestamp=now,
             project_id=project_id,
             project_name=project_name,
             duration_seconds=duration,
             metadata=metadata or {},
         )
 
-        self._logs.append(entry)
-
-        # 保留最近 500 條記錄
-        if len(self._logs) > 500:
-            self._logs = self._logs[-500:]
+        # 寫入資料庫
+        async with self._session() as session:
+            db_row = ActivityLog(
+                id=entry_id,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                activity_type=activity_type.value,
+                message=message,
+                timestamp=now,
+                project_id=project_id,
+                project_name=project_name,
+                duration_seconds=duration,
+                metadata_json=metadata if metadata else None,
+            )
+            session.add(db_row)
+            await session.commit()
 
         return entry
 
@@ -111,95 +166,123 @@ class ActivityLogRepository:
         project_id: Optional[str] = None,
     ) -> List[ActivityEntry]:
         """取得最近的活動日誌"""
-        logs = self._logs
+        from app.db.models import ActivityLog
 
-        if agent_id:
-            logs = [l for l in logs if l.agent_id == agent_id]
+        async with self._session() as session:
+            stmt = select(ActivityLog)
 
-        if project_id:
-            logs = [l for l in logs if l.project_id == project_id]
+            conditions = []
+            if agent_id:
+                conditions.append(ActivityLog.agent_id == agent_id)
+            if project_id:
+                conditions.append(ActivityLog.project_id == project_id)
+            if conditions:
+                stmt = stmt.where(and_(*conditions))
 
-        # 按時間倒序
-        logs = sorted(logs, key=lambda x: x.timestamp, reverse=True)
+            stmt = stmt.order_by(ActivityLog.timestamp.desc()).limit(limit)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
 
-        return logs[:limit]
+            return [_db_to_entry(row) for row in rows]
 
     async def get_agent_timeline(self, agent_id: str, limit: int = 20) -> List[ActivityEntry]:
         """取得特定 Agent 的時間線"""
-        logs = [l for l in self._logs if l.agent_id == agent_id]
-        logs = sorted(logs, key=lambda x: x.timestamp, reverse=True)
-        return logs[:limit]
+        return await self.get_recent(limit=limit, agent_id=agent_id)
 
-    def get_stats(self) -> Dict[str, Any]:
+    async def get_stats(self) -> Dict[str, Any]:
         """取得統計資料"""
-        from collections import Counter
+        from app.db.models import ActivityLog
 
-        type_counts = Counter(l.activity_type.value for l in self._logs)
-        agent_counts = Counter(l.agent_id for l in self._logs)
+        async with self._session() as session:
+            # 總數
+            total_result = await session.execute(
+                select(func.count()).select_from(ActivityLog)
+            )
+            total = total_result.scalar() or 0
 
-        return {
-            "total_entries": len(self._logs),
-            "by_type": dict(type_counts),
-            "by_agent": dict(agent_counts),
-            "active_tasks": len(self._task_starts),
-        }
+            # 按類型統計
+            type_result = await session.execute(
+                select(ActivityLog.activity_type, func.count())
+                .group_by(ActivityLog.activity_type)
+            )
+            by_type = {row[0]: row[1] for row in type_result.all()}
+
+            # 按 Agent 統計
+            agent_result = await session.execute(
+                select(ActivityLog.agent_id, func.count())
+                .group_by(ActivityLog.agent_id)
+            )
+            by_agent = {row[0]: row[1] for row in agent_result.all()}
+
+            return {
+                "total_entries": total,
+                "by_type": by_type,
+                "by_agent": by_agent,
+                "active_tasks": len(self._task_starts),
+            }
 
     async def get_agent_daily_summary(self, agent_id: str, date: Optional[datetime] = None) -> Dict[str, Any]:
         """取得特定 Agent 的每日摘要"""
+        from app.db.models import ActivityLog
+
         if date is None:
             date = datetime.utcnow()
 
-        # 篩選當日的日誌
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        daily_logs = [
-            l for l in self._logs
-            if l.agent_id == agent_id and start_of_day <= l.timestamp <= end_of_day
-        ]
+        async with self._session() as session:
+            stmt = (
+                select(ActivityLog)
+                .where(
+                    ActivityLog.agent_id == agent_id,
+                    ActivityLog.timestamp >= start_of_day,
+                    ActivityLog.timestamp <= end_of_day,
+                )
+                .order_by(ActivityLog.timestamp.asc())
+            )
+            result = await session.execute(stmt)
+            daily_logs = [_db_to_entry(row) for row in result.scalars().all()]
 
         # 計算總工時
         total_seconds = 0
         tasks = []
-        task_pairs = {}  # 用於配對 start/end
+        task_pairs = {}
 
-        for log in sorted(daily_logs, key=lambda x: x.timestamp):
-            if log.activity_type == ActivityType.TASK_START:
-                task_pairs[log.message] = {
-                    "start_time": log.timestamp.strftime("%H:%M:%S"),
+        for log_entry in daily_logs:
+            if log_entry.activity_type == ActivityType.TASK_START:
+                task_pairs[log_entry.message] = {
+                    "start_time": log_entry.timestamp.strftime("%H:%M:%S"),
                     "end_time": None,
-                    "message": log.message.replace("開始任務: ", ""),
+                    "message": log_entry.message.replace("開始任務: ", "").replace("處理功能需求: ", "").replace("分析 CEO 指令: ", ""),
                     "status": "in_progress",
                     "duration_seconds": 0,
                 }
-            elif log.activity_type == ActivityType.TASK_END:
-                task_msg = log.message.replace("完成任務: ", "")
-                # 找到對應的開始記錄
+            elif log_entry.activity_type == ActivityType.TASK_END:
+                task_msg = log_entry.message.replace("完成任務: ", "").replace("已建立 PRD: ", "").replace("分析完成: ", "")
                 for key, task in task_pairs.items():
-                    if task_msg in key or key.replace("開始任務: ", "") == task_msg:
-                        task["end_time"] = log.timestamp.strftime("%H:%M:%S")
+                    if task_msg in key or any(part in task_msg for part in key.split()):
+                        task["end_time"] = log_entry.timestamp.strftime("%H:%M:%S")
                         task["status"] = "completed"
-                        if log.duration_seconds:
-                            task["duration_seconds"] = log.duration_seconds
-                            total_seconds += log.duration_seconds
+                        if log_entry.duration_seconds:
+                            task["duration_seconds"] = log_entry.duration_seconds
+                            total_seconds += log_entry.duration_seconds
                         break
                 else:
-                    # 沒找到配對，直接加入
-                    if log.duration_seconds:
-                        total_seconds += log.duration_seconds
+                    if log_entry.duration_seconds:
+                        total_seconds += log_entry.duration_seconds
                         tasks.append({
                             "start_time": None,
-                            "end_time": log.timestamp.strftime("%H:%M:%S"),
+                            "end_time": log_entry.timestamp.strftime("%H:%M:%S"),
                             "message": task_msg,
                             "status": "completed",
-                            "duration_seconds": log.duration_seconds,
-                            "duration_formatted": self._format_duration(log.duration_seconds),
+                            "duration_seconds": log_entry.duration_seconds,
+                            "duration_formatted": self._format_duration(log_entry.duration_seconds),
                         })
 
         # 處理進行中的任務
         for key, task in task_pairs.items():
             if task["status"] == "in_progress":
-                # 計算進行中的時間
                 start_time = datetime.strptime(task["start_time"], "%H:%M:%S").replace(
                     year=date.year, month=date.month, day=date.day
                 )
@@ -211,14 +294,12 @@ class ActivityLogRepository:
                 task["duration_formatted"] = self._format_duration(task["duration_seconds"])
             tasks.append(task)
 
-        # 按開始時間排序
         tasks = sorted(tasks, key=lambda x: x.get("start_time") or "00:00:00", reverse=True)
 
-        # 取得 agent 名稱
         agent_name = agent_id
-        for log in daily_logs:
-            if log.agent_name:
-                agent_name = log.agent_name
+        for log_entry in daily_logs:
+            if log_entry.agent_name:
+                agent_name = log_entry.agent_name
                 break
 
         return {
@@ -233,26 +314,51 @@ class ActivityLogRepository:
 
     async def get_all_agents_daily_summary(self, date: Optional[datetime] = None) -> List[Dict[str, Any]]:
         """取得所有 Agent 的每日摘要"""
+        from app.db.models import ActivityLog
+
         if date is None:
             date = datetime.utcnow()
 
-        # 找出當日有活動的所有 agent
         start_of_day = date.replace(hour=0, minute=0, second=0, microsecond=0)
         end_of_day = date.replace(hour=23, minute=59, second=59, microsecond=999999)
 
-        agent_ids = set(
-            l.agent_id for l in self._logs
-            if start_of_day <= l.timestamp <= end_of_day
-        )
+        async with self._session() as session:
+            stmt = (
+                select(ActivityLog.agent_id)
+                .where(
+                    ActivityLog.timestamp >= start_of_day,
+                    ActivityLog.timestamp <= end_of_day,
+                )
+                .distinct()
+            )
+            result = await session.execute(stmt)
+            agent_ids = [row[0] for row in result.all()]
 
         summaries = []
-        for agent_id in agent_ids:
-            summary = await self.get_agent_daily_summary(agent_id, date)
+        for aid in agent_ids:
+            summary = await self.get_agent_daily_summary(aid, date)
             summaries.append(summary)
 
-        # 按工時排序
         summaries = sorted(summaries, key=lambda x: x["total_work_seconds"], reverse=True)
         return summaries
+
+    async def cleanup_old_logs(self, days: int = 30):
+        """清理舊日誌"""
+        from app.db.models import ActivityLog
+
+        cutoff = datetime.utcnow() - timedelta(days=days)
+
+        async with self._session() as session:
+            stmt = select(ActivityLog).where(ActivityLog.timestamp < cutoff)
+            result = await session.execute(stmt)
+            rows = result.scalars().all()
+            deleted = len(rows)
+            for row in rows:
+                await session.delete(row)
+            await session.commit()
+
+        logger.info(f"Cleaned up {deleted} old activity logs (older than {days} days)")
+        return deleted
 
     @staticmethod
     def _format_duration(seconds: int) -> str:
@@ -270,8 +376,12 @@ class ActivityLogRepository:
 
 
 # 全域實例
-_activity_repo = ActivityLogRepository()
+_activity_repo: Optional[ActivityLogRepository] = None
 
 
 def get_activity_repo() -> ActivityLogRepository:
+    global _activity_repo
+    if _activity_repo is None:
+        from app.db.database import AsyncSessionLocal
+        _activity_repo = ActivityLogRepository(session_factory=AsyncSessionLocal)
     return _activity_repo

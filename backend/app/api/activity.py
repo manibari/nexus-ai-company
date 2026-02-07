@@ -44,7 +44,7 @@ async def get_activity_log(
 async def get_activity_stats():
     """取得活動統計"""
     repo = get_activity_repo()
-    return repo.get_stats()
+    return await repo.get_stats()
 
 
 @router.get("/agent/{agent_id}", response_model=List[Dict[str, Any]])

@@ -168,3 +168,144 @@ class InboxItem(Base):
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     decided_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+# ===================================================================
+# Step 2: 新增 Models — 資料持久化
+# ===================================================================
+
+
+class CeoTodo(Base):
+    """CEO 待辦事項"""
+    __tablename__ = "ceo_todos"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_name: Mapped[str] = mapped_column(String(200))
+    subject: Mapped[str] = mapped_column(String(500))
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # 來源
+    from_agent: Mapped[str] = mapped_column(String(50), default="")
+    from_agent_name: Mapped[str] = mapped_column(String(100), default="")
+
+    # 分類
+    type: Mapped[str] = mapped_column(String(50), default="notification")
+    priority: Mapped[str] = mapped_column(String(20), default="normal")
+
+    # 狀態
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+
+    # 時間
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # JSON 欄位
+    actions: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    response: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # 關聯
+    related_entity_type: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    related_entity_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+
+class Feature(Base):
+    """功能需求"""
+    __tablename__ = "features"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    project_name: Mapped[str] = mapped_column(String(200))
+    title: Mapped[str] = mapped_column(String(500))
+    description: Mapped[str] = mapped_column(Text, default="")
+    user_story: Mapped[str] = mapped_column(Text, default="")
+    acceptance_criteria: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # 分類
+    priority: Mapped[str] = mapped_column(String(20), default="p2_medium")
+    status: Mapped[str] = mapped_column(String(30), default="draft")
+
+    # 來源
+    source_intake_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    ceo_input: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+    # PRD 內容
+    prd_summary: Mapped[str] = mapped_column(Text, default="")
+    technical_requirements: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    ui_requirements: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    out_of_scope: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+
+    # 估算
+    estimated_effort: Mapped[str] = mapped_column(String(10), default="M")
+    estimated_days: Mapped[int] = mapped_column(Integer, default=3)
+
+    # 關聯
+    related_features: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    assigned_to: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 時間
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class CeoInput(Base):
+    """CEO 輸入歷史"""
+    __tablename__ = "ceo_inputs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    content: Mapped[str] = mapped_column(Text)
+    source: Mapped[str] = mapped_column(String(20), default="web")
+    input_type: Mapped[str] = mapped_column(String(20), default="text")
+
+    # 分析結果
+    intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(30), default="processing")
+    route_to: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    analysis_result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # 時間
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    confirmed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class AgentHandoff(Base):
+    """Agent 互轉紀錄"""
+    __tablename__ = "agent_handoffs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    from_agent: Mapped[str] = mapped_column(String(50))
+    to_agent: Mapped[str] = mapped_column(String(50))
+    intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+
+    # 資料
+    payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="pending")
+    result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # 時間
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class ActivityLog(Base):
+    """Agent 活動日誌"""
+    __tablename__ = "activity_logs"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    agent_id: Mapped[str] = mapped_column(String(50), index=True)
+    agent_name: Mapped[str] = mapped_column(String(100))
+    activity_type: Mapped[str] = mapped_column(String(30), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+
+    # 可選
+    project_id: Mapped[Optional[str]] = mapped_column(String(50), nullable=True, index=True)
+    project_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
+    duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
