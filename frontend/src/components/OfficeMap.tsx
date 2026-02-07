@@ -25,25 +25,26 @@ interface OfficeMapProps {
 }
 
 const ROOMS: Room[] = [
-  { id: 'ceo_office', name: 'CEO Office', x: 20, y: 20, width: 160, height: 110, color: '#1e3a5f', icon: '👔', agents: [] },
+  { id: 'ceo_office', name: 'CEO Office', x: 20, y: 20, width: 160, height: 110, color: '#1e3a5f', icon: '👔', agents: ['CEO'] },
   { id: 'reception', name: 'Reception', x: 200, y: 20, width: 140, height: 110, color: '#1e4d3a', icon: '🚪', agents: ['GATEKEEPER'] },
   { id: 'sales', name: 'Sales', x: 360, y: 20, width: 160, height: 110, color: '#4d1e3a', icon: '💼', agents: ['HUNTER'] },
   { id: 'war_room', name: 'War Room', x: 20, y: 150, width: 170, height: 120, color: '#3a1e4d', icon: '🎯', agents: ['ORCHESTRATOR'] },
-  { id: 'dev_lab', name: 'Dev Lab', x: 210, y: 150, width: 150, height: 120, color: '#1e3a4d', icon: '💻', agents: ['BUILDER'] },
-  { id: 'qa_station', name: 'QA Station', x: 380, y: 150, width: 140, height: 120, color: '#4d3a1e', icon: '🔍', agents: ['INSPECTOR'] },
-  { id: 'finance', name: 'Finance', x: 20, y: 290, width: 130, height: 100, color: '#2d4d1e', icon: '📊', agents: ['LEDGER'] },
+  { id: 'dev_lab', name: 'Dev Lab', x: 210, y: 150, width: 150, height: 120, color: '#1e3a4d', icon: '💻', agents: ['DEVELOPER'] },
+  { id: 'qa_station', name: 'QA Station', x: 380, y: 150, width: 140, height: 120, color: '#4d3a1e', icon: '🔍', agents: ['QA'] },
+  { id: 'product', name: 'Product', x: 20, y: 290, width: 130, height: 100, color: '#2d4d1e', icon: '📋', agents: ['PM'] },
   { id: 'meeting', name: 'Meeting Room', x: 170, y: 290, width: 170, height: 100, color: '#1e2d4d', icon: '🤝', agents: [] },
   { id: 'break_room', name: 'Break Room', x: 360, y: 290, width: 160, height: 100, color: '#4d4d1e', icon: '☕', agents: [] },
 ]
 
 // Agent character colors
 const AGENT_COLORS: Record<string, { skin: string; shirt: string; hair: string }> = {
+  CEO: { skin: '#fcd5b5', shirt: '#1e3a5f', hair: '#3a3a3a' },
   GATEKEEPER: { skin: '#fcd5b5', shirt: '#22c55e', hair: '#4a3728' },
   HUNTER: { skin: '#e8beac', shirt: '#f59e0b', hair: '#1a1a1a' },
   ORCHESTRATOR: { skin: '#fcd5b5', shirt: '#8b5cf6', hair: '#6b4423' },
-  BUILDER: { skin: '#d4a574', shirt: '#3b82f6', hair: '#1a1a1a' },
-  INSPECTOR: { skin: '#fcd5b5', shirt: '#ec4899', hair: '#8b4513' },
-  LEDGER: { skin: '#e8beac', shirt: '#14b8a6', hair: '#2d2d2d' },
+  PM: { skin: '#e8beac', shirt: '#14b8a6', hair: '#2d2d2d' },
+  DEVELOPER: { skin: '#d4a574', shirt: '#3b82f6', hair: '#1a1a1a' },
+  QA: { skin: '#fcd5b5', shirt: '#ec4899', hair: '#8b4513' },
 }
 
 // 2.5D Character component

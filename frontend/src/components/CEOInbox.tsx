@@ -56,6 +56,20 @@ interface CEOInboxProps {
   apiUrl: string
 }
 
+// Input Queue Item (submitted inputs waiting for processing)
+interface InputQueueItem {
+  id: string
+  content: string
+  status: string
+  intent: string
+  confidence: number
+  summary: string
+  suggested_actions: string[]
+  requires_confirmation: boolean
+  created_at: string
+  processing_agent?: string
+}
+
 // === Main Component ===
 
 export default function CEOInbox({ apiUrl }: CEOInboxProps) {
@@ -68,6 +82,8 @@ export default function CEOInbox({ apiUrl }: CEOInboxProps) {
   // Input form state (existing functionality)
   const [input, setInput] = useState('')
   const [inputLoading, setInputLoading] = useState(false)
+  const [inputResult, setInputResult] = useState<{ success: boolean; message: string } | null>(null)
+  const [inputQueue, setInputQueue] = useState<InputQueueItem[]>([])
 
   // Selected todo for detail view
   const [selectedTodo, setSelectedTodo] = useState<TodoItem | null>(null)
@@ -126,28 +142,84 @@ export default function CEOInbox({ apiUrl }: CEOInboxProps) {
   const handleInputSubmit = async () => {
     if (!input.trim()) return
 
+    const submittedContent = input
     setInputLoading(true)
     setError(null)
+    setInputResult(null)
 
     try {
       const response = await fetch(`${apiUrl}/api/v1/intake/input`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          content: input,
+          content: submittedContent,
           input_type: 'text',
           source: 'web',
         }),
       })
 
       if (response.ok) {
+        const data = await response.json()
         setInput('')
-        // Could show success message or result
+
+        // Determine processing agent based on intent
+        const agentMap: Record<string, string> = {
+          'product_feature': 'GATEKEEPER → PM → DEVELOPER',
+          'product_bug': 'GATEKEEPER → QA → DEVELOPER',
+          'opportunity': 'GATEKEEPER → HUNTER',
+          'project_status': 'GATEKEEPER → ORCHESTRATOR',
+          'project': 'GATEKEEPER → ORCHESTRATOR',
+          'task': 'GATEKEEPER → ORCHESTRATOR',
+        }
+
+        // Add to input queue
+        const queueItem: InputQueueItem = {
+          id: data.id,
+          content: submittedContent,
+          status: data.status,
+          intent: data.intent,
+          confidence: data.confidence,
+          summary: data.summary,
+          suggested_actions: data.suggested_actions || [],
+          requires_confirmation: data.requires_confirmation,
+          created_at: data.created_at,
+          processing_agent: agentMap[data.intent] || 'GATEKEEPER',
+        }
+        setInputQueue(prev => [queueItem, ...prev])
+      } else {
+        setInputResult({ success: false, message: '提交失敗，請重試' })
       }
     } catch (err) {
       setError('Failed to submit')
+      setInputResult({ success: false, message: '網路錯誤，請檢查連線' })
     } finally {
       setInputLoading(false)
+    }
+  }
+
+  // Handle confirm/reject input
+  const handleInputAction = async (inputId: string, action: 'confirm' | 'reject') => {
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/intake/inputs/${inputId}/confirm`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          confirmed: action === 'confirm',
+          feedback: action === 'reject' ? '使用者取消' : undefined,
+        }),
+      })
+
+      if (response.ok) {
+        // Update status (keep in queue for history)
+        setInputQueue(prev => prev.map(item =>
+          item.id === inputId
+            ? { ...item, status: action === 'confirm' ? 'confirmed' : 'rejected' }
+            : item
+        ))
+        // Don't remove - keep for history
+      }
+    } catch (err) {
+      setError('操作失敗')
     }
   }
 
@@ -239,13 +311,18 @@ export default function CEOInbox({ apiUrl }: CEOInboxProps) {
         </button>
         <button
           onClick={() => setActiveView('input')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
             activeView === 'input'
               ? 'bg-cyan-600 text-white'
               : 'bg-slate-700 text-gray-300 hover:bg-slate-600'
           }`}
         >
           ✏️ Input
+          {inputQueue.length > 0 && (
+            <span className="px-2 py-0.5 bg-cyan-500 rounded-full text-xs">
+              {inputQueue.length}
+            </span>
+          )}
         </button>
       </div>
 
@@ -483,11 +560,150 @@ export default function CEOInbox({ apiUrl }: CEOInboxProps) {
             </button>
           </div>
 
+          {/* Error Display */}
+          {inputResult && !inputResult.success && (
+            <div className="mt-4 p-4 rounded-lg border bg-red-900/30 border-red-500 text-red-300">
+              <div className="flex items-start gap-2">
+                <span className="text-xl">❌</span>
+                <pre className="whitespace-pre-wrap text-sm flex-1">{inputResult.message}</pre>
+                <button
+                  onClick={() => setInputResult(null)}
+                  className="text-gray-400 hover:text-white"
+                >✕</button>
+              </div>
+            </div>
+          )}
+
+          {/* Input History */}
+          {inputQueue.length > 0 && (
+            <div className="mt-6 space-y-3">
+              <h3 className="text-sm font-medium text-gray-400 flex items-center gap-2">
+                📜 指令歷史 ({inputQueue.length})
+              </h3>
+              {inputQueue.map((item) => (
+                <div
+                  key={item.id}
+                  className={`p-4 rounded-lg border transition-all duration-300 ${
+                    item.status === 'confirmed'
+                      ? 'bg-green-900/20 border-green-500'
+                      : item.status === 'rejected'
+                      ? 'bg-red-900/20 border-red-500 opacity-50'
+                      : 'bg-slate-700/50 border-cyan-500/50'
+                  }`}
+                >
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-2">
+                    <div className="flex-1">
+                      <div className="text-sm text-gray-300 mb-1 line-clamp-2">
+                        "{item.content.substring(0, 100)}{item.content.length > 100 ? '...' : ''}"
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className={`px-2 py-0.5 rounded ${
+                          item.intent === 'product_feature' ? 'bg-purple-600' :
+                          item.intent === 'product_bug' ? 'bg-red-600' :
+                          item.intent === 'opportunity' ? 'bg-green-600' :
+                          item.intent === 'project' ? 'bg-blue-600' :
+                          item.intent === 'project_status' ? 'bg-cyan-600' :
+                          item.intent === 'task' ? 'bg-yellow-600' :
+                          'bg-slate-600'
+                        }`}>
+                          {item.intent === 'product_feature' ? '🚀 功能需求 (PM)' :
+                           item.intent === 'product_bug' ? '🐛 Bug (QA)' :
+                           item.intent === 'opportunity' ? '💼 商機 (HUNTER)' :
+                           item.intent === 'project' ? '📁 新專案' :
+                           item.intent === 'project_status' ? '📊 狀態查詢' :
+                           item.intent === 'task' ? '✅ 任務' :
+                           `📝 ${item.intent}`}
+                        </span>
+                        <span className="text-gray-500">
+                          信心度: {Math.round(item.confidence * 100)}%
+                        </span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-xs px-2 py-1 rounded ${
+                        item.status === 'awaiting_confirmation'
+                          ? 'bg-yellow-600/30 text-yellow-300'
+                          : item.status === 'confirmed'
+                          ? 'bg-green-600/30 text-green-300'
+                          : item.status === 'rejected'
+                          ? 'bg-red-600/30 text-red-300'
+                          : 'bg-cyan-600/30 text-cyan-300'
+                      }`}>
+                        {item.status === 'awaiting_confirmation' ? '⏳ 待確認' :
+                         item.status === 'confirmed' ? '✅ 已確認' :
+                         item.status === 'rejected' ? '❌ 已取消' :
+                         '🔄 處理中'}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Agent Processing Status & Time */}
+                  <div className="flex items-center justify-between mb-3 text-xs">
+                    <div className="flex items-center gap-2 text-cyan-400">
+                      {item.status === 'awaiting_confirmation' || item.status === 'processing' ? (
+                        <span className="animate-pulse">⚡</span>
+                      ) : (
+                        <span>📍</span>
+                      )}
+                      <span>Agent: {item.processing_agent || 'GATEKEEPER'}</span>
+                    </div>
+                    <div className="text-gray-500">
+                      {new Date(item.created_at).toLocaleString('zh-TW', {
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Summary */}
+                  <div className="text-sm text-gray-400 mb-3 whitespace-pre-line">
+                    {item.summary}
+                  </div>
+
+                  {/* Suggested Actions */}
+                  {item.suggested_actions.length > 0 && (
+                    <div className="text-xs text-gray-500 mb-3">
+                      建議動作：
+                      <ul className="list-disc list-inside mt-1">
+                        {item.suggested_actions.map((action, idx) => (
+                          <li key={idx}>{action}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  {item.requires_confirmation && item.status === 'awaiting_confirmation' && (
+                    <div className="flex gap-2 pt-3 border-t border-slate-600">
+                      <button
+                        onClick={() => handleInputAction(item.id, 'confirm')}
+                        className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 rounded text-sm transition-colors"
+                      >
+                        ✓ 確認執行
+                      </button>
+                      <button
+                        onClick={() => handleInputAction(item.id, 'reject')}
+                        className="px-4 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm transition-colors"
+                      >
+                        ✗ 取消
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Empty State */}
-          <div className="text-center text-gray-500 py-8 mt-4">
-            <div className="text-4xl mb-2">💬</div>
-            <div>輸入商機、任務或問題，系統會自動分析並建議下一步</div>
-          </div>
+          {inputQueue.length === 0 && (
+            <div className="text-center text-gray-500 py-8 mt-4">
+              <div className="text-4xl mb-2">💬</div>
+              <div>輸入商機、任務或問題，系統會自動分析並建議下一步</div>
+            </div>
+          )}
         </div>
       )}
     </div>
