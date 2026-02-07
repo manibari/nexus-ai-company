@@ -315,6 +315,21 @@ class PMAgent:
         self.name = "Product Manager"
         self._gemini_client = None
 
+    @property
+    def agent_id(self) -> str:
+        return "PM"
+
+    @property
+    def agent_name(self) -> str:
+        return "Product Manager"
+
+    async def handle(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """AgentHandler 介面實作"""
+        content = payload.get("content", "")
+        entities = payload.get("entities", [])
+        intake_id = payload.get("intake_id")
+        return await self.process_feature_request(content, entities, intake_id)
+
     def _get_todo_repo(self):
         """延遲取得 Todo Repository（避免循環引用）"""
         if self.todo_repo is None:

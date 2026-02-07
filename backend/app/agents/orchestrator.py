@@ -157,6 +157,21 @@ class OrchestratorAgent:
         self.id = "ORCHESTRATOR"
         self.name = "PM Agent"
 
+    @property
+    def agent_id(self) -> str:
+        return "ORCHESTRATOR"
+
+    @property
+    def agent_name(self) -> str:
+        return "PM Agent"
+
+    async def handle(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """AgentHandler 介面實作"""
+        content = payload.get("content", "")
+        entities = payload.get("entities", [])
+        priority = payload.get("priority", "medium")
+        return await self.process_project_request(content, entities, priority)
+
     async def process_project_request(
         self,
         content: str,

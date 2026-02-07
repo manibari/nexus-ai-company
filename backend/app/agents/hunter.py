@@ -83,6 +83,27 @@ class HunterAgent:
         self.id = "HUNTER"
         self.name = "Sales Agent"
 
+    @property
+    def agent_id(self) -> str:
+        return "HUNTER"
+
+    @property
+    def agent_name(self) -> str:
+        return "Sales Agent"
+
+    async def handle(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """AgentHandler 介面實作"""
+        content = payload.get("content", "")
+        raw_entities = payload.get("entities", [])
+        # 標準化 entity 格式：GATEKEEPER 用 entity_type，但 process_intake 用 type
+        entities = [
+            {"type": e.get("entity_type", e.get("type")), "value": e.get("value"),
+             "metadata": e.get("metadata", {})}
+            for e in raw_entities
+        ]
+        meddic_analysis = payload.get("meddic_analysis")
+        return await self.process_intake(content, entities, meddic_analysis)
+
     async def process_intake(
         self,
         content: str,

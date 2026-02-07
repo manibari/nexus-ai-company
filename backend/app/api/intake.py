@@ -108,36 +108,57 @@ async def receive_ceo_input(request: CEOInputRequest):
     }
     intent_label = intent_labels.get(analysis.intent.value, analysis.intent.value)
 
-    # 根據意圖分派到對應 Agent
+    # 根據意圖透過 Registry 分派到對應 Agent
     extra_data = {}
+    routable_agents = {"PM", "HUNTER", "ORCHESTRATOR"}
 
-    if analysis.intent == Intent.PRODUCT_FEATURE:
-        # 自動轉給 PM Agent 處理
-        from app.agents.pm import get_pm_agent
-        pm = get_pm_agent()
+    if analysis.route_to in routable_agents:
+        from app.agents.registry import get_registry
+        registry = get_registry()
         entities = [{"entity_type": e.entity_type, "value": e.value} for e in analysis.entities]
-        pm_result = await pm.process_feature_request(
-            content=request.content,
-            entities=entities,
-            intake_id=input_id,
+        dispatch_result = await registry.dispatch(
+            target_id=analysis.route_to,
+            payload={
+                "content": request.content,
+                "entities": entities,
+                "intake_id": input_id,
+                "intent": analysis.intent.value,
+                "meddic_analysis": analysis.meddic_analysis,
+            },
+            from_agent="GATEKEEPER",
         )
+
         extra_data = {
-            "feature_id": pm_result.get("feature", {}).get("id"),
-            "prd_summary": pm_result.get("prd", {}).get("summary"),
-            "routed_to": "PM",
+            "routed_to": analysis.route_to,
+            "handoff_id": dispatch_result.get("handoff_id"),
+            "dispatch_status": dispatch_result.get("status"),
         }
-        summary = f"識別為【{intent_label}】\n{pm_result.get('prd', {}).get('summary', analysis.summary)}"
-        suggested_actions = [
-            f"功能需求 {extra_data.get('feature_id')} 已建立",
-            "PM 已撰寫 PRD，待 CEO 確認",
-            "確認後將分派給 DEVELOPER 實作",
-        ]
+
+        # PM 特殊：顯示 PRD 摘要
+        if analysis.route_to == "PM" and dispatch_result.get("status") != "error":
+            extra_data["feature_id"] = dispatch_result.get("feature", {}).get("id")
+            extra_data["prd_summary"] = dispatch_result.get("prd", {}).get("summary")
+            summary = f"識別為【{intent_label}】\n{dispatch_result.get('prd', {}).get('summary', analysis.summary)}"
+            suggested_actions = [
+                f"功能需求 {extra_data.get('feature_id')} 已建立",
+                "PM 已撰寫 PRD，待 CEO 確認",
+                "確認後將分派給 DEVELOPER 實作",
+            ]
+        else:
+            summary = f"識別為【{intent_label}】→ 已派發給 {analysis.route_to}\n{analysis.summary}"
+            suggested_actions = analysis.suggested_actions
     else:
         summary = f"識別為【{intent_label}】\n{analysis.summary}"
         suggested_actions = analysis.suggested_actions
 
     # 儲存 CEO 輸入到 DB
-    status_val = "awaiting_confirmation" if analysis.requires_confirmation else "processing"
+    # 如果已成功 dispatch，狀態為 dispatched；否則依 requires_confirmation 決定
+    if extra_data.get("dispatch_status") == "completed":
+        status_val = "dispatched"
+    elif analysis.requires_confirmation:
+        status_val = "awaiting_confirmation"
+    else:
+        status_val = "processing"
     created_at = datetime.utcnow()
 
     try:
@@ -315,28 +336,54 @@ async def confirm_input(input_id: str, request: ConfirmationRequest):
     CEO 確認輸入
 
     確認後：
-    - 如果是商機：建立 Lead，通知 HUNTER
-    - 如果是專案：建立需求，通知 ORCHESTRATOR
+    - 如果是商機：透過 Registry dispatch 給 HUNTER
+    - 如果是專案：透過 Registry dispatch 給 ORCHESTRATOR
     """
-    # TODO: 呼叫 IntakeProcessor.confirm
+    from app.db.database import AsyncSessionLocal
+    from app.db.models import CeoInput
 
-    if request.confirmed:
+    async with AsyncSessionLocal() as session:
+        row = await session.get(CeoInput, input_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Input not found")
+
+        if not request.confirmed:
+            row.status = "rejected"
+            await session.commit()
+            return {
+                "input_id": input_id,
+                "status": "rejected",
+                "message": "輸入已取消",
+                "feedback": request.feedback,
+            }
+
+        # 確認：更新狀態並透過 Registry dispatch
+        row.status = "confirmed"
+        row.confirmed_at = datetime.utcnow()
+        await session.commit()
+
+        # 如果有目標 Agent 且尚未 dispatch（awaiting_confirmation 的才需要）
+        dispatch_result = None
+        if row.route_to and row.status != "dispatched":
+            from app.agents.registry import get_registry
+            registry = get_registry()
+            dispatch_result = await registry.dispatch(
+                target_id=row.route_to,
+                payload={
+                    "content": row.content,
+                    "entities": (row.analysis_result or {}).get("entities", []),
+                    "intake_id": input_id,
+                    "intent": row.intent,
+                },
+                from_agent="GATEKEEPER",
+            )
+
         return {
             "input_id": input_id,
             "status": "confirmed",
             "message": "輸入已確認，正在建立對應任務",
-            "created_entity": {
-                "type": "lead",
-                "id": "LEAD-0001",
-            },
-            "routed_to": "HUNTER",
-        }
-    else:
-        return {
-            "input_id": input_id,
-            "status": "rejected",
-            "message": "輸入已取消",
-            "feedback": request.feedback,
+            "routed_to": row.route_to,
+            "dispatch_result": dispatch_result,
         }
 
 

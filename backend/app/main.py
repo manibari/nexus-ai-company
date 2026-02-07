@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, product, tasks
+from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, goals, health, intake, knowledge, pipeline, pm, product, tasks
 from app.db.database import create_tables
 
 
@@ -16,7 +16,24 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     await create_tables()
+
+    # 初始化 Agent Registry
+    from app.db.database import AsyncSessionLocal
+    from app.agents.registry import AgentRegistry, set_registry
+    from app.agents.gatekeeper import GatekeeperAgent
+    from app.agents.pm import get_pm_agent
+    from app.agents.hunter import HunterAgent
+    from app.agents.orchestrator import OrchestratorAgent
+
+    registry = AgentRegistry(session_factory=AsyncSessionLocal)
+    registry.register(GatekeeperAgent())
+    registry.register(get_pm_agent())
+    registry.register(HunterAgent())
+    registry.register(OrchestratorAgent())
+    set_registry(registry)
+
     print("🚀 Nexus AI Company is starting up...")
+    print(f"   Registered agents: {[a['id'] for a in registry.list_agents()]}")
     yield
     # Shutdown
     print("👋 Nexus AI Company is shutting down...")
@@ -53,6 +70,7 @@ app.include_router(product.router, prefix="/api/v1/product", tags=["Product Boar
 app.include_router(catalog.router, prefix="/api/v1/catalog", tags=["Product Catalog"])
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["Knowledge Base"])
 app.include_router(activity.router, prefix="/api/v1/activity", tags=["Agent Activity Log"])
+app.include_router(pm.router, prefix="/api/v1/pm", tags=["PM Agent"])
 
 
 @app.get("/")
