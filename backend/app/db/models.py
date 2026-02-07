@@ -34,7 +34,7 @@ class Agent(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    current_task = relationship("Task", back_populates="assigned_agent")
+    current_task = relationship("Task", foreign_keys=[current_task_id])
     logs = relationship("Log", back_populates="agent")
     ledger_entries = relationship("LedgerEntry", back_populates="agent")
 
@@ -77,7 +77,7 @@ class Task(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     # Relationships
-    assigned_agent = relationship("Agent", back_populates="current_task")
+    assigned_agent = relationship("Agent", foreign_keys=[assigned_to])
     logs = relationship("Log", back_populates="task")
 
 
