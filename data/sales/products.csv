@@ -1,0 +1,6 @@
+id,name,list_price,cost_base
+PROD-001,Nexus AI 基礎方案,500000,200000
+PROD-002,Nexus AI 專業方案,1500000,600000
+PROD-003,Nexus AI 企業方案,3000000,1200000
+PROD-004,客製化 AI Agent 開發,800000,400000
+PROD-005,AI 顧問服務 (月費),150000,60000

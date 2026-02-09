@@ -69,7 +69,7 @@ async def receive_ceo_input(request: CEOInputRequest):
 
     根據意圖自動分派：
     - product_feature → PM Agent
-    - opportunity → HUNTER Agent
+    - opportunity → SALES Agent
     - 其他 → 待確認
     """
     from uuid import uuid4
@@ -110,7 +110,7 @@ async def receive_ceo_input(request: CEOInputRequest):
 
     # 根據意圖透過 Registry 分派到對應 Agent
     extra_data = {}
-    routable_agents = {"PM", "HUNTER", "ORCHESTRATOR", "QA"}
+    routable_agents = {"PM", "SALES", "ORCHESTRATOR", "QA"}
 
     if analysis.route_to in routable_agents:
         from app.agents.registry import get_registry
@@ -336,7 +336,7 @@ async def confirm_input(input_id: str, request: ConfirmationRequest):
     CEO 確認輸入
 
     確認後：
-    - 如果是商機：透過 Registry dispatch 給 HUNTER
+    - 如果是商機：透過 Registry dispatch 給 SALES
     - 如果是專案：透過 Registry dispatch 給 ORCHESTRATOR
     """
     from app.db.database import AsyncSessionLocal
@@ -464,7 +464,7 @@ async def quick_create_opportunity(
         "lead_id": lead_id,
         "company": company,
         "urgency": urgency,
-        "message": f"已建立商機 {lead_id}，HUNTER 將開始跟進",
+        "message": f"已建立商機 {lead_id}，SALES 將開始跟進",
     }
 
 

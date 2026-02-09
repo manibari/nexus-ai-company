@@ -10,7 +10,7 @@ GATEKEEPER Agent
 意圖類型：
 - product_feature: 產品功能需求 → PM
 - product_bug: 產品 Bug → QA
-- opportunity: 商機 → HUNTER
+- opportunity: 商機 → SALES
 - project_status: 專案狀態 → ORCHESTRATOR
 - task: 任務 → ORCHESTRATOR
 - question: 問題 → 直接回答
@@ -35,7 +35,7 @@ class Intent(Enum):
     """意圖類型"""
     PRODUCT_FEATURE = "product_feature"  # 產品功能需求 → PM
     PRODUCT_BUG = "product_bug"          # 產品 Bug → QA
-    OPPORTUNITY = "opportunity"          # 商機 → HUNTER
+    OPPORTUNITY = "opportunity"          # 商機 → SALES
     PROJECT_STATUS = "project_status"    # 專案狀態 → ORCHESTRATOR
     PROJECT = "project"                  # 新專案 → ORCHESTRATOR
     QUESTION = "question"                # 問題 → 直接回答或知識庫
@@ -62,7 +62,7 @@ class IntakeAnalysis:
     entities: List[ParsedEntity]
     summary: str
     suggested_actions: List[str]
-    route_to: str  # HUNTER, ORCHESTRATOR, etc.
+    route_to: str  # SALES, ORCHESTRATOR, etc.
     requires_confirmation: bool = True
     meddic_analysis: Optional[Dict] = None
 
@@ -260,7 +260,7 @@ class GatekeeperAgent:
 重要：
 1. 如果提到現有產品的功能改進，一定是 product_feature，不是 opportunity
 2. 如果提到「股票軟體」「StockPulse」等，這是我們的產品，不是商機
-3. next_agent 對應：product_feature→PM, product_bug→QA, opportunity→HUNTER, project_status→ORCHESTRATOR
+3. next_agent 對應：product_feature→PM, product_bug→QA, opportunity→SALES, project_status→ORCHESTRATOR
 """
 
         try:
@@ -446,7 +446,7 @@ class GatekeeperAgent:
         routes = {
             Intent.PRODUCT_FEATURE: "PM",
             Intent.PRODUCT_BUG: "QA",
-            Intent.OPPORTUNITY: "HUNTER",
+            Intent.OPPORTUNITY: "SALES",
             Intent.PROJECT_STATUS: "ORCHESTRATOR",
             Intent.PROJECT: "ORCHESTRATOR",
             Intent.TASK: "ORCHESTRATOR",

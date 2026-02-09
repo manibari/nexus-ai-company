@@ -40,7 +40,7 @@ AGENT_ROLES: Dict[str, str] = {
     "CEO": "執行長",
     "GATEKEEPER": "意圖分析",
     "PM": "產品經理",
-    "HUNTER": "業務",
+    "SALES": "業務",
     "DEVELOPER": "工程師",
     "QA": "測試員",
     "ORCHESTRATOR": "專案協調",

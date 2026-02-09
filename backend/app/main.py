@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, tasks
+from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, sales, tasks
 from app.db.database import create_tables
 
 
@@ -24,7 +24,7 @@ async def lifespan(app: FastAPI):
     from app.agents.registry import AgentRegistry, set_registry
     from app.agents.gatekeeper import GatekeeperAgent
     from app.agents.pm import get_pm_agent
-    from app.agents.hunter import HunterAgent
+    from app.agents.sales import get_sales_agent
     from app.agents.orchestrator import OrchestratorAgent
     from app.agents.developer import get_developer_agent
     from app.agents.qa import get_qa_agent
@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
     registry = AgentRegistry(session_factory=AsyncSessionLocal)
     registry.register(GatekeeperAgent())
     registry.register(get_pm_agent())
-    registry.register(HunterAgent())
+    registry.register(get_sales_agent())
     registry.register(OrchestratorAgent())
     registry.register(get_developer_agent())
     registry.register(get_qa_agent())
@@ -118,6 +118,7 @@ app.include_router(activity.router, prefix="/api/v1/activity", tags=["Agent Acti
 app.include_router(pm.router, prefix="/api/v1/pm", tags=["PM Agent"])
 app.include_router(developer.router, prefix="/api/v1/developer", tags=["Developer Agent"])
 app.include_router(qa.router, prefix="/api/v1/qa", tags=["QA Agent"])
+app.include_router(sales.router, prefix="/api/v1/sales", tags=["Sales Agent"])
 
 
 @app.get("/")
