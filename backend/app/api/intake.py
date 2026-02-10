@@ -134,6 +134,37 @@ async def receive_ceo_input(request: CEOInputRequest):
             "dispatch_status": dispatch_result.get("status"),
         }
 
+        # Task Lifecycle: 建立 lifecycle task（Issue #14）
+        try:
+            from app.task.repository import get_task_repo
+            task_repo = get_task_repo()
+            lifecycle_task = await task_repo.create_task(
+                intent=analysis.intent.value,
+                priority=2,
+                source="intake",
+                title=f"[{analysis.intent.value}] {request.content[:100]}",
+                description=request.content,
+            )
+            extra_data["task_id"] = lifecycle_task["id"]
+            extra_data["trace_id"] = lifecycle_task["trace_id"]
+
+            await task_repo.record_event(
+                task_id=lifecycle_task["id"],
+                event_type="TASK_SUBMITTED",
+                actor="user:ceo",
+                from_status=None,
+                to_status="submitted",
+                payload={
+                    "intent": analysis.intent.value,
+                    "route_to": analysis.route_to,
+                    "input_id": input_id,
+                },
+                trace_id=lifecycle_task["trace_id"],
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to create lifecycle task: {e}")
+
         # PM 特殊：顯示 PRD 摘要
         if analysis.route_to == "PM" and dispatch_result.get("status") != "error":
             extra_data["feature_id"] = dispatch_result.get("feature", {}).get("id")

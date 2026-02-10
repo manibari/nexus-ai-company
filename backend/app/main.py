@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, sales, tasks
+from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, sales, task_lifecycle, tasks
 from app.agents.ws_manager import ConnectionManager, set_ws_manager, get_ws_manager
 from app.db.database import create_tables
 
@@ -124,6 +124,7 @@ app.include_router(pm.router, prefix="/api/v1/pm", tags=["PM Agent"])
 app.include_router(developer.router, prefix="/api/v1/developer", tags=["Developer Agent"])
 app.include_router(qa.router, prefix="/api/v1/qa", tags=["QA Agent"])
 app.include_router(sales.router, prefix="/api/v1/sales", tags=["Sales Agent"])
+app.include_router(task_lifecycle.router, prefix="/api/v1/task", tags=["Task Lifecycle"])
 
 
 @app.websocket("/ws")

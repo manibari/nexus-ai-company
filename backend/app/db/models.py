@@ -76,9 +76,17 @@ class Task(Base):
     )
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
+    # Task Lifecycle（Issue #14）
+    lifecycle_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True, index=True)
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    source: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+
     # Relationships
     assigned_agent = relationship("Agent", foreign_keys=[assigned_to])
     logs = relationship("Log", back_populates="task")
+    events = relationship("TaskEvent", back_populates="task")
+    execution_plans = relationship("ExecutionPlan", back_populates="task")
 
 
 class Log(Base):
@@ -363,3 +371,43 @@ class ActivityLog(Base):
     project_name: Mapped[Optional[str]] = mapped_column(String(200), nullable=True)
     duration_seconds: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+
+    # Task Lifecycle（Issue #14）
+    trace_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    actor: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+
+
+class ExecutionPlan(Base):
+    """執行計畫（Task Lifecycle Issue #14）"""
+    __tablename__ = "execution_plans"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(50), ForeignKey("tasks.id"), index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    plan_json: Mapped[dict] = mapped_column(JSON)
+    routing_risk: Mapped[float] = mapped_column(Float, default=0.0)
+    risk_factors: Mapped[Optional[list]] = mapped_column(JSON, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), default="draft")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    approved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Relationships
+    task = relationship("Task", back_populates="execution_plans")
+
+
+class TaskEvent(Base):
+    """任務事件紀錄（不可變 Event Store，Issue #14）"""
+    __tablename__ = "task_events"
+
+    id: Mapped[str] = mapped_column(String(50), primary_key=True)
+    task_id: Mapped[str] = mapped_column(String(50), ForeignKey("tasks.id"), index=True)
+    event_type: Mapped[str] = mapped_column(String(50))
+    actor: Mapped[str] = mapped_column(String(100))
+    from_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    to_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    payload: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    trace_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    task = relationship("Task", back_populates="events")
