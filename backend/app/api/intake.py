@@ -116,25 +116,10 @@ async def receive_ceo_input(request: CEOInputRequest):
         from app.agents.registry import get_registry
         registry = get_registry()
         entities = [{"entity_type": e.entity_type, "value": e.value} for e in analysis.entities]
-        dispatch_result = await registry.dispatch(
-            target_id=analysis.route_to,
-            payload={
-                "content": request.content,
-                "entities": entities,
-                "intake_id": input_id,
-                "intent": analysis.intent.value,
-                "meddic_analysis": analysis.meddic_analysis,
-            },
-            from_agent="GATEKEEPER",
-        )
 
-        extra_data = {
-            "routed_to": analysis.route_to,
-            "handoff_id": dispatch_result.get("handoff_id"),
-            "dispatch_status": dispatch_result.get("status"),
-        }
-
-        # Task Lifecycle: 建立 lifecycle task（Issue #14）
+        # Task Lifecycle: 先建立 lifecycle task（Issue #14），dispatch 時帶入 task_id（Issue #15）
+        lifecycle_task_id = None
+        lifecycle_trace_id = None
         try:
             from app.task.repository import get_task_repo
             task_repo = get_task_repo()
@@ -145,11 +130,11 @@ async def receive_ceo_input(request: CEOInputRequest):
                 title=f"[{analysis.intent.value}] {request.content[:100]}",
                 description=request.content,
             )
-            extra_data["task_id"] = lifecycle_task["id"]
-            extra_data["trace_id"] = lifecycle_task["trace_id"]
+            lifecycle_task_id = lifecycle_task["id"]
+            lifecycle_trace_id = lifecycle_task["trace_id"]
 
             await task_repo.record_event(
-                task_id=lifecycle_task["id"],
+                task_id=lifecycle_task_id,
                 event_type="TASK_SUBMITTED",
                 actor="user:ceo",
                 from_status=None,
@@ -159,11 +144,38 @@ async def receive_ceo_input(request: CEOInputRequest):
                     "route_to": analysis.route_to,
                     "input_id": input_id,
                 },
-                trace_id=lifecycle_task["trace_id"],
+                trace_id=lifecycle_trace_id,
             )
         except Exception as e:
             import logging
             logging.getLogger(__name__).error(f"Failed to create lifecycle task: {e}")
+
+        dispatch_payload = {
+            "content": request.content,
+            "entities": entities,
+            "intake_id": input_id,
+            "intent": analysis.intent.value,
+            "meddic_analysis": analysis.meddic_analysis,
+        }
+        # Issue #15: 傳入 task_id + trace_id 讓 ORCHESTRATOR 驅動 lifecycle
+        if lifecycle_task_id:
+            dispatch_payload["task_id"] = lifecycle_task_id
+            dispatch_payload["trace_id"] = lifecycle_trace_id
+
+        dispatch_result = await registry.dispatch(
+            target_id=analysis.route_to,
+            payload=dispatch_payload,
+            from_agent="GATEKEEPER",
+        )
+
+        extra_data = {
+            "routed_to": analysis.route_to,
+            "handoff_id": dispatch_result.get("handoff_id"),
+            "dispatch_status": dispatch_result.get("status"),
+        }
+        if lifecycle_task_id:
+            extra_data["task_id"] = lifecycle_task_id
+            extra_data["trace_id"] = lifecycle_trace_id
 
         # PM 特殊：顯示 PRD 摘要
         if analysis.route_to == "PM" and dispatch_result.get("status") != "error":

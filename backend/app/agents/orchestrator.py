@@ -1,14 +1,20 @@
 """
-ORCHESTRATOR Agent
+ORCHESTRATOR Agent（司禮監）
 
-負責：
-- 目標分解 (Goal Decomposition)
-- 階段規劃 (Phase Planning)
-- 進度追蹤 (Progress Tracking)
-- 資源調度 (Resource Allocation)
-- 問題升級 (Escalation)
+Issue #15: 升級為 TaskOrchestrator，整合 Task Lifecycle 狀態機。
+
+職責：
+- Execution Plan 生成（Gemini LLM）
+- Routing Governance（第一層治理：風險評估 → 自動放行 / CEO 審核）
+- 狀態機驅動：submitted → planning → plan_review / plan_approved
+- Plan 核准後 dispatch 到 Domain Agent(s)
+
+保留舊有 Goal Decomposition 功能（向後相容）。
 """
 
+import json
+import logging
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
@@ -25,6 +31,11 @@ from app.goals.models import (
     ChecklistItem,
 )
 from app.goals.repository import GoalRepository
+
+logger = logging.getLogger(__name__)
+
+# Routing Governance 門檻
+AUTO_APPROVE_RISK_THRESHOLD = 0.3
 
 
 class OrchestratorAction(Enum):
@@ -75,14 +86,19 @@ class DecompositionResult:
 
 class OrchestratorAgent:
     """
-    ORCHESTRATOR Agent - 專案經理
+    ORCHESTRATOR Agent — 司禮監
 
-    職責：
-    1. 接收專案需求（從 GATEKEEPER 或 CEO）
-    2. 分解為可執行的 Goals 和 Phases
-    3. 追蹤進度
-    4. 協調資源
-    5. 處理阻塞和升級
+    Issue #15: 升級為流程控制中樞。
+
+    新流程（handle with task_id）:
+    1. 接收 payload（含 task_id / trace_id）
+    2. 驅動狀態機：submitted → planning
+    3. Gemini 生成 Execution Plan
+    4. Routing Governance：risk < 0.3 自動放行，≥ 0.3 → CEO 審核
+    5. Plan 核准後 dispatch 到 Domain Agent(s)
+
+    舊流程（handle without task_id）:
+    - 保留 Goal Decomposition（向後相容）
     """
 
     # 預設階段模板（用於常見專案類型）
@@ -152,10 +168,20 @@ class OrchestratorAgent:
         ],
     }
 
+    # Intent → Agent 對應
+    INTENT_AGENT_MAP = {
+        "product_feature": "PM",
+        "product_bug": "QA",
+        "opportunity": "SALES",
+        "project": "PM",
+        "task": "PM",
+    }
+
     def __init__(self, goal_repo: Optional[GoalRepository] = None):
         self.goals = goal_repo or GoalRepository()
         self.id = "ORCHESTRATOR"
-        self.name = "PM Agent"
+        self.name = "司禮監"
+        self._gemini_client = None
 
     @property
     def agent_id(self) -> str:
@@ -163,14 +189,508 @@ class OrchestratorAgent:
 
     @property
     def agent_name(self) -> str:
-        return "PM Agent"
+        return "司禮監"
+
+    # ================================================================
+    # AgentHandler 介面
+    # ================================================================
 
     async def handle(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """AgentHandler 介面實作"""
+        """
+        AgentHandler 介面實作。
+
+        如果 payload 包含 task_id → 走 lifecycle 流程（Issue #15）
+        否則 → 走舊的 Goal Decomposition（向後相容）
+        """
+        task_id = payload.get("task_id")
+
+        if task_id:
+            return await self._handle_lifecycle(payload)
+        else:
+            # 向後相容：舊的 Goal Decomposition
+            content = payload.get("content", "")
+            entities = payload.get("entities", [])
+            priority = payload.get("priority", "medium")
+            return await self.process_project_request(content, entities, priority)
+
+    # ================================================================
+    # Issue #15: Lifecycle 流程
+    # ================================================================
+
+    async def _handle_lifecycle(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Task Lifecycle 流程：
+
+        1. submitted → planning（start_planning）
+        2. Gemini 生成 Execution Plan
+        3. 儲存 Plan + 記錄 event
+        4. 評估 routing_risk
+        5. risk < 0.3 → auto_approve_plan → plan_approved
+        6. risk ≥ 0.3 → request_plan_review → CEO Todo
+        """
+        from app.task.repository import get_task_repo
+        from app.core.task_state_machine import TaskLifecycle
+        from app.agents.activity_log import ActivityType, get_activity_repo
+
+        task_id = payload["task_id"]
+        trace_id = payload.get("trace_id")
         content = payload.get("content", "")
+        intent = payload.get("intent", "")
         entities = payload.get("entities", [])
-        priority = payload.get("priority", "medium")
-        return await self.process_project_request(content, entities, priority)
+
+        repo = get_task_repo()
+        activity_repo = get_activity_repo()
+
+        # 記錄活動開始
+        await activity_repo.log(
+            agent_id="ORCHESTRATOR",
+            agent_name="司禮監",
+            activity_type=ActivityType.TASK_START,
+            message=f"開始編排任務: {content[:60]}...",
+            metadata={"task_id": task_id, "intent": intent},
+        )
+
+        # 1. submitted → planning
+        task = await repo.get_task(task_id)
+        if not task:
+            return {"status": "error", "message": f"Task {task_id} not found"}
+
+        machine = TaskLifecycle(initial_state=task["lifecycle_status"])
+        ok, result = machine.try_trigger("start_planning")
+        if not ok:
+            logger.warning(f"Cannot start_planning for {task_id}: {result}")
+            return {"status": "error", "message": result}
+
+        await repo.update_lifecycle_status(task_id, "planning")
+        await repo.record_event(
+            task_id=task_id,
+            event_type="TRANSITION_START_PLANNING",
+            actor="agent:ORCHESTRATOR",
+            from_status="submitted",
+            to_status="planning",
+            trace_id=trace_id,
+        )
+
+        # 2. Gemini 生成 Execution Plan
+        plan_data = await self._generate_execution_plan(content, intent, entities)
+        routing_risk = plan_data.get("routing_risk_score", 0.5)
+        risk_factors = plan_data.get("risk_factors", [])
+
+        # 3. 儲存 Plan
+        saved_plan = await repo.save_execution_plan(
+            task_id=task_id,
+            plan_json=plan_data,
+            routing_risk=routing_risk,
+            risk_factors=risk_factors,
+        )
+
+        await repo.record_event(
+            task_id=task_id,
+            event_type="PLAN_GENERATED",
+            actor="agent:ORCHESTRATOR",
+            from_status="planning",
+            to_status="planning",
+            payload={
+                "plan_id": saved_plan["id"],
+                "plan_version": saved_plan["version"],
+                "routing_risk": routing_risk,
+            },
+            trace_id=trace_id,
+        )
+
+        # 4. Routing Governance
+        is_auto = self._is_auto_approvable(plan_data, routing_risk)
+
+        if is_auto:
+            # 自動放行：planning → plan_approved
+            machine2 = TaskLifecycle(initial_state="planning")
+            machine2.auto_approve_plan()
+
+            await repo.update_lifecycle_status(task_id, "plan_approved")
+            await repo.record_event(
+                task_id=task_id,
+                event_type="PLAN_AUTO_APPROVED",
+                actor="system:routing_governance",
+                from_status="planning",
+                to_status="plan_approved",
+                payload={"routing_risk": routing_risk, "reason": "auto_approve_eligible"},
+                trace_id=trace_id,
+            )
+
+            await activity_repo.log(
+                agent_id="ORCHESTRATOR",
+                agent_name="司禮監",
+                activity_type=ActivityType.MILESTONE,
+                message=f"執行計畫自動放行（風險 {routing_risk:.2f}）",
+                metadata={"task_id": task_id, "plan_id": saved_plan["id"]},
+            )
+
+            # 自動放行後 dispatch 到目標 Agent
+            dispatch_result = await self._dispatch_plan_steps(task_id, plan_data, payload, trace_id)
+
+            return {
+                "status": "plan_auto_approved",
+                "task_id": task_id,
+                "plan_id": saved_plan["id"],
+                "routing_risk": routing_risk,
+                "auto_approved": True,
+                "dispatch_result": dispatch_result,
+            }
+        else:
+            # 需要 CEO 審核：planning → plan_review
+            machine3 = TaskLifecycle(initial_state="planning")
+            machine3.request_plan_review()
+
+            await repo.update_lifecycle_status(task_id, "plan_review")
+            await repo.record_event(
+                task_id=task_id,
+                event_type="PLAN_PENDING_REVIEW",
+                actor="system:routing_governance",
+                from_status="planning",
+                to_status="plan_review",
+                payload={"routing_risk": routing_risk, "risk_factors": risk_factors},
+                trace_id=trace_id,
+            )
+
+            # 建立 CEO Todo
+            todo = await self._create_plan_review_todo(
+                task_id=task_id,
+                plan=plan_data,
+                plan_id=saved_plan["id"],
+                routing_risk=routing_risk,
+                risk_factors=risk_factors,
+                content=content,
+            )
+
+            # WS broadcast
+            await self._broadcast_plan_review(task_id, routing_risk, trace_id)
+
+            await activity_repo.log(
+                agent_id="ORCHESTRATOR",
+                agent_name="司禮監",
+                activity_type=ActivityType.MILESTONE,
+                message=f"執行計畫需 CEO 審核（風險 {routing_risk:.2f}）",
+                metadata={"task_id": task_id, "plan_id": saved_plan["id"]},
+            )
+
+            return {
+                "status": "plan_pending_review",
+                "task_id": task_id,
+                "plan_id": saved_plan["id"],
+                "routing_risk": routing_risk,
+                "risk_factors": risk_factors,
+                "auto_approved": False,
+                "todo_id": todo.id if todo else None,
+            }
+
+    # ================================================================
+    # Gemini: Execution Plan 生成
+    # ================================================================
+
+    def _get_gemini(self):
+        """延遲初始化 Gemini client"""
+        if self._gemini_client is None:
+            import google.generativeai as genai
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                logger.warning("No Gemini API key found")
+                return None
+            genai.configure(api_key=api_key)
+            self._gemini_client = genai.GenerativeModel("gemini-2.5-flash")
+        return self._gemini_client
+
+    async def _generate_execution_plan(
+        self,
+        content: str,
+        intent: str,
+        entities: List[Dict],
+    ) -> Dict[str, Any]:
+        """使用 Gemini 生成 Execution Plan"""
+        gemini = self._get_gemini()
+
+        entities_text = ", ".join(
+            f"{e.get('entity_type', e.get('type', ''))}: {e.get('value', '')}"
+            for e in entities
+        ) if entities else "無"
+
+        if not gemini:
+            return self._fallback_execution_plan(content, intent, entities)
+
+        prompt = f"""你是 Nexus AI Company 的司禮監（TaskOrchestrator），負責分析 CEO 指令並規劃執行方案。
+
+## CEO 指令
+{content}
+
+## 意圖分析
+- Intent: {intent}
+- 實體: {entities_text}
+
+## 可用 Agent
+- PM: 產品經理，負責需求分析、PRD、產品規劃
+- SALES: 業務，負責商機分析、MEDDIC、報價
+- DEVELOPER: 工程師，負責技術方案、開發實作
+- QA: 品質保證，負責測試計畫、驗收測試
+
+## 輸出格式（純 JSON）
+{{
+  "interpreted_as": "一句話說明你理解的任務",
+  "routing_risk_score": 0.5,
+  "auto_approve_eligible": false,
+  "risk_factors": [
+    "風險因素 1",
+    "風險因素 2"
+  ],
+  "execution_plan": {{
+    "steps": [
+      {{
+        "order": 1,
+        "agent": "PM",
+        "sub_task": "具體要做什麼",
+        "estimated_tokens": 3000,
+        "depends_on": []
+      }}
+    ],
+    "total_estimated_tokens": 3000
+  }}
+}}
+
+## 評分規則
+routing_risk_score 評分：
+- 0.0-0.2: 純內部、低風險、單 Agent
+- 0.2-0.4: 內部但涉及多步驟
+- 0.4-0.6: 涉及對外操作（發信、報價等）
+- 0.6-0.8: 金額超過 100 萬、涉及部署
+- 0.8-1.0: 涉及刪除、不可逆操作
+
+auto_approve_eligible = true 當：
+- routing_risk_score < 0.3
+- 單一 Agent
+- 不涉及對外操作、金額、部署
+"""
+
+        try:
+            response = gemini.generate_content(prompt)
+            text = response.text.strip()
+
+            # 清理 markdown
+            if text.startswith("```"):
+                text = text.split("```")[1]
+                if text.startswith("json"):
+                    text = text[4:]
+            text = text.strip()
+
+            plan = json.loads(text)
+            return plan
+
+        except Exception as e:
+            logger.error(f"Gemini plan generation failed: {e}")
+            return self._fallback_execution_plan(content, intent, entities)
+
+    def _fallback_execution_plan(
+        self,
+        content: str,
+        intent: str,
+        entities: List[Dict],
+    ) -> Dict[str, Any]:
+        """Gemini 不可用時的 fallback plan"""
+        target_agent = self.INTENT_AGENT_MAP.get(intent, "PM")
+
+        return {
+            "interpreted_as": f"[{intent}] {content[:100]}",
+            "routing_risk_score": 0.5,
+            "auto_approve_eligible": False,
+            "risk_factors": ["Gemini 不可用，使用 fallback 計畫，需人工審核"],
+            "execution_plan": {
+                "steps": [
+                    {
+                        "order": 1,
+                        "agent": target_agent,
+                        "sub_task": content[:200],
+                        "estimated_tokens": 3000,
+                        "depends_on": [],
+                    }
+                ],
+                "total_estimated_tokens": 3000,
+            },
+        }
+
+    # ================================================================
+    # Routing Governance
+    # ================================================================
+
+    def _is_auto_approvable(self, plan: Dict, routing_risk: float) -> bool:
+        """判斷是否自動放行"""
+        if routing_risk >= AUTO_APPROVE_RISK_THRESHOLD:
+            return False
+
+        if not plan.get("auto_approve_eligible", False):
+            return False
+
+        steps = plan.get("execution_plan", {}).get("steps", [])
+        if len(steps) > 1:
+            return False
+
+        return True
+
+    async def _create_plan_review_todo(
+        self,
+        task_id: str,
+        plan: Dict,
+        plan_id: str,
+        routing_risk: float,
+        risk_factors: List[str],
+        content: str,
+    ):
+        """建立 CEO Plan Review 待辦"""
+        try:
+            from app.ceo.models import TodoItem, TodoAction, TodoType, TodoPriority
+            from app.api.ceo_todo import _get_repo
+
+            interpreted = plan.get("interpreted_as", content[:80])
+            steps = plan.get("execution_plan", {}).get("steps", [])
+            steps_desc = "\n".join(
+                f"  {s['order']}. [{s['agent']}] {s['sub_task']}"
+                for s in steps
+            )
+            risks_desc = "\n".join(f"  - {r}" for r in risk_factors)
+
+            todo = TodoItem(
+                id="",
+                project_name="Task Lifecycle",
+                subject=f"[司禮監] 執行計畫待審核: {interpreted[:60]}",
+                description=(
+                    f"任務: {interpreted}\n"
+                    f"風險分數: {routing_risk:.2f}\n\n"
+                    f"執行步驟:\n{steps_desc}\n\n"
+                    f"風險因素:\n{risks_desc}"
+                ),
+                from_agent="ORCHESTRATOR",
+                from_agent_name="司禮監",
+                type=TodoType.APPROVAL,
+                priority=TodoPriority.HIGH if routing_risk >= 0.5 else TodoPriority.NORMAL,
+                actions=[
+                    TodoAction(id="approve", label="核准執行", style="primary"),
+                    TodoAction(
+                        id="approve_with_comment",
+                        label="核准並備註",
+                        style="primary",
+                        requires_input=True,
+                        input_placeholder="補充指示...",
+                    ),
+                    TodoAction(
+                        id="revise",
+                        label="要求修改",
+                        style="default",
+                        requires_input=True,
+                        input_placeholder="修改要求...",
+                    ),
+                    TodoAction(id="reject", label="駁回", style="danger"),
+                ],
+                related_entity_type="task",
+                related_entity_id=task_id,
+                payload={
+                    "task_id": task_id,
+                    "plan_id": plan_id,
+                    "routing_risk": routing_risk,
+                    "execution_plan": plan,
+                    "callback_endpoint": f"/api/v1/task/{task_id}/plan/approve",
+                },
+            )
+
+            todo_repo = _get_repo()
+            await todo_repo.create(todo)
+            logger.info(f"Created plan review todo: {todo.id} for task {task_id}")
+            return todo
+
+        except Exception as e:
+            logger.error(f"Failed to create plan review todo: {e}")
+            return None
+
+    async def _broadcast_plan_review(self, task_id: str, routing_risk: float, trace_id: str):
+        """WS 通知：有新的執行計畫待審核"""
+        try:
+            from app.agents.ws_manager import get_ws_manager
+            mgr = get_ws_manager()
+            if mgr:
+                await mgr.broadcast({
+                    "type": "task_lifecycle",
+                    "task_id": task_id,
+                    "lifecycle_status": "plan_review",
+                    "routing_risk": routing_risk,
+                    "trace_id": trace_id,
+                    "message": "有新的執行計畫待審核",
+                })
+        except Exception as e:
+            logger.warning(f"WS broadcast failed: {e}")
+
+    # ================================================================
+    # Plan 核准後 dispatch
+    # ================================================================
+
+    async def _dispatch_plan_steps(
+        self,
+        task_id: str,
+        plan: Dict,
+        original_payload: Dict,
+        trace_id: str,
+    ) -> Dict[str, Any]:
+        """Plan 核准後，依序 dispatch 到目標 Agent(s)"""
+        from app.agents.registry import get_registry
+        from app.task.repository import get_task_repo
+        from app.core.task_state_machine import TaskLifecycle
+
+        repo = get_task_repo()
+        steps = plan.get("execution_plan", {}).get("steps", [])
+
+        if not steps:
+            return {"status": "no_steps"}
+
+        # plan_approved → reasoning
+        machine = TaskLifecycle(initial_state="plan_approved")
+        ok, _ = machine.try_trigger("start_reasoning")
+        if ok:
+            await repo.update_lifecycle_status(task_id, "reasoning")
+            await repo.record_event(
+                task_id=task_id,
+                event_type="TRANSITION_START_REASONING",
+                actor="agent:ORCHESTRATOR",
+                from_status="plan_approved",
+                to_status="reasoning",
+                trace_id=trace_id,
+            )
+
+        # dispatch 第一步（sequential：目前只 dispatch 第一步）
+        first_step = steps[0]
+        target_agent = first_step.get("agent", "PM")
+
+        registry = get_registry()
+
+        dispatch_payload = {
+            "content": original_payload.get("content", ""),
+            "entities": original_payload.get("entities", []),
+            "intake_id": original_payload.get("intake_id"),
+            "intent": original_payload.get("intent"),
+            "sub_task": first_step.get("sub_task", ""),
+            "task_id": task_id,
+            "trace_id": trace_id,
+        }
+
+        dispatch_result = await registry.dispatch(
+            target_id=target_agent,
+            payload=dispatch_payload,
+            from_agent="ORCHESTRATOR",
+        )
+
+        return {
+            "status": "dispatched",
+            "target_agent": target_agent,
+            "step_order": first_step.get("order", 1),
+            "dispatch_status": dispatch_result.get("status"),
+        }
+
+    # ================================================================
+    # 舊有 Goal Decomposition（向後相容）
+    # ================================================================
 
     async def process_project_request(
         self,
@@ -178,17 +698,7 @@ class OrchestratorAgent:
         entities: List[Dict],
         priority: str = "medium",
     ) -> Dict[str, Any]:
-        """
-        處理專案需求
-
-        Args:
-            content: 專案描述
-            entities: 解析出的實體
-            priority: 優先級
-
-        Returns:
-            處理結果
-        """
+        """處理專案需求（舊流程，向後相容）"""
         # 1. 識別專案類型
         project_type = self._identify_project_type(content)
 
@@ -209,7 +719,7 @@ class OrchestratorAgent:
         total_minutes = sum(p.time_estimate.estimated_minutes for p in phases)
         goal.time_estimate = TimeEstimate(
             estimated_minutes=total_minutes,
-            buffer_minutes=int(total_minutes * 0.2),  # 20% 緩衝
+            buffer_minutes=int(total_minutes * 0.2),
         )
 
         # 5. 儲存
@@ -234,34 +744,20 @@ class OrchestratorAgent:
         goal_id: str,
         project_type: Optional[str] = None,
     ) -> DecompositionResult:
-        """
-        分解目標為階段
-
-        Args:
-            goal_id: 目標 ID
-            project_type: 專案類型（可選）
-
-        Returns:
-            分解結果
-        """
+        """分解目標為階段"""
         goal = await self.goals.get(goal_id)
         if not goal:
             raise ValueError(f"Goal {goal_id} not found")
 
-        # 識別專案類型
         if not project_type:
             project_type = self._identify_project_type(goal.objective)
 
-        # 生成階段
         phases = self._decompose_to_phases(goal, project_type)
-
-        # 更新 Goal
         goal.phases = phases
         await self.goals.update(goal)
 
-        # 分析結果
         total_minutes = sum(p.time_estimate.estimated_minutes for p in phases)
-        critical_path = [p.name for p in phases]  # 簡化：所有階段都在關鍵路徑
+        critical_path = [p.name for p in phases]
 
         risks = self._identify_decomposition_risks(phases)
         recommendations = self._generate_recommendations(goal, phases)
@@ -276,20 +772,11 @@ class OrchestratorAgent:
         )
 
     async def get_status_report(self, goal_id: str) -> Dict[str, Any]:
-        """
-        取得目標狀態報告
-
-        Args:
-            goal_id: 目標 ID
-
-        Returns:
-            狀態報告
-        """
+        """取得目標狀態報告"""
         goal = await self.goals.get(goal_id)
         if not goal:
             return {"error": "Goal not found"}
 
-        # 計算進度
         phases_summary = []
         for phase in goal.phases:
             phases_summary.append({
@@ -301,7 +788,6 @@ class OrchestratorAgent:
                 "is_overdue": phase.is_overdue,
             })
 
-        # 識別阻塞
         blockers = []
         for phase in goal.phases:
             if phase.status == PhaseStatus.BLOCKED:
@@ -310,7 +796,6 @@ class OrchestratorAgent:
                     "blockers": phase.blockers,
                 })
 
-        # 識別風險
         risks = []
         if goal.is_overdue:
             risks.append("目標已超時")
@@ -339,28 +824,16 @@ class OrchestratorAgent:
         issue: str,
         severity: str = "medium",
     ) -> Dict[str, Any]:
-        """
-        處理升級
-
-        Args:
-            goal_id: 目標 ID
-            issue: 問題描述
-            severity: 嚴重程度
-
-        Returns:
-            處理結果
-        """
+        """處理升級"""
         goal = await self.goals.get(goal_id)
         if not goal:
             return {"error": "Goal not found"}
 
-        # 記錄問題
         if goal.notes:
             goal.notes += f"\n[ESCALATION {datetime.now().isoformat()}] {issue}"
         else:
             goal.notes = f"[ESCALATION {datetime.now().isoformat()}] {issue}"
 
-        # 根據嚴重程度決定動作
         actions = []
 
         if severity == "critical":
@@ -389,30 +862,18 @@ class OrchestratorAgent:
         reason: str,
         adjustments: Dict[str, Any],
     ) -> Dict[str, Any]:
-        """
-        重新規劃
-
-        Args:
-            goal_id: 目標 ID
-            reason: 重新規劃原因
-            adjustments: 調整內容
-
-        Returns:
-            重新規劃結果
-        """
+        """重新規劃"""
         goal = await self.goals.get(goal_id)
         if not goal:
             return {"error": "Goal not found"}
 
         changes = []
 
-        # 調整時間
         if "add_buffer_minutes" in adjustments:
             extra = adjustments["add_buffer_minutes"]
             goal.time_estimate.buffer_minutes += extra
             changes.append(f"增加 {extra} 分鐘緩衝時間")
 
-        # 調整階段
         if "extend_phase" in adjustments:
             phase_id = adjustments["extend_phase"]["phase_id"]
             extra_minutes = adjustments["extend_phase"]["minutes"]
@@ -422,7 +883,6 @@ class OrchestratorAgent:
                     phase.time_estimate.buffer_minutes += int(extra_minutes * 0.1)
                     changes.append(f"階段 {phase.name} 增加 {extra_minutes} 分鐘")
 
-        # 記錄
         note = f"[REPLAN {datetime.now().isoformat()}] {reason}"
         goal.notes = f"{goal.notes}\n{note}" if goal.notes else note
 
@@ -434,6 +894,10 @@ class OrchestratorAgent:
             "new_estimate": goal.time_estimate.to_dict(),
         }
 
+    # ================================================================
+    # Private helpers
+    # ================================================================
+
     def _identify_project_type(self, content: str) -> str:
         """識別專案類型"""
         content_lower = content.lower()
@@ -443,11 +907,10 @@ class OrchestratorAgent:
         elif any(kw in content_lower for kw in ["開發", "系統", "功能", "develop", "build"]):
             return "development"
         else:
-            return "development"  # 預設
+            return "development"
 
     def _extract_title(self, content: str) -> str:
         """提取標題"""
-        # 取前 50 個字元作為標題
         lines = content.strip().split('\n')
         first_line = lines[0] if lines else content[:50]
         return first_line[:50] + ("..." if len(first_line) > 50 else "")
