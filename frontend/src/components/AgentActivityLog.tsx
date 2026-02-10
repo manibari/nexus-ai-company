@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
 
 interface ActivityEntry {
   id: string
@@ -47,7 +48,7 @@ export default function AgentActivityLog({ apiUrl, agentId, limit = 30 }: AgentA
   const [error, setError] = useState<string | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(true)
 
-  const fetchActivities = async () => {
+  const fetchActivities = useCallback(async () => {
     try {
       let url = `${apiUrl}/api/v1/activity/?limit=${limit}`
       if (agentId) {
@@ -67,16 +68,39 @@ export default function AgentActivityLog({ apiUrl, agentId, limit = 30 }: AgentA
     } finally {
       setLoading(false)
     }
-  }
+  }, [apiUrl, limit, agentId])
 
-  useEffect(() => {
-    fetchActivities()
+  // Initial fetch
+  useEffect(() => { fetchActivities() }, [fetchActivities])
 
-    if (autoRefresh) {
-      const interval = setInterval(fetchActivities, 5000) // Refresh every 5 seconds
-      return () => clearInterval(interval)
+  // WebSocket: real-time activity updates
+  const handleWsMessage = useCallback((data: any) => {
+    if (data.type === 'activity') {
+      // If filtering by agentId, only accept matching activities
+      if (agentId && data.agent_id !== agentId) return
+
+      const newEntry: ActivityEntry = {
+        id: `ws-${Date.now()}`,
+        agent_id: data.agent_id,
+        agent_name: data.agent_name,
+        activity_type: data.activity_type,
+        message: data.message,
+        timestamp: data.timestamp,
+        project_id: data.project_id ?? null,
+        project_name: data.project_name ?? null,
+        duration_seconds: data.duration_seconds ?? null,
+        metadata: {},
+      }
+      setActivities(prev => [newEntry, ...prev].slice(0, limit))
     }
-  }, [agentId, autoRefresh])
+  }, [agentId, limit])
+
+  const { connected } = useAgentWebSocket({
+    apiUrl,
+    onMessage: handleWsMessage,
+    enabled: autoRefresh,
+    onReconnect: fetchActivities,
+  })
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -108,6 +132,7 @@ export default function AgentActivityLog({ apiUrl, agentId, limit = 30 }: AgentA
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-bold text-cyan-300 flex items-center gap-2">
           📜 Agent Activity Log
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} title={connected ? 'Live' : 'Reconnecting...'} />
         </h3>
         <div className="flex items-center gap-2">
           <label className="flex items-center gap-1 text-sm text-gray-400">

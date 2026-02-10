@@ -157,6 +157,22 @@ class ActivityLogRepository:
             session.add(db_row)
             await session.commit()
 
+        # WebSocket broadcast
+        from app.agents.ws_manager import get_ws_manager
+        mgr = get_ws_manager()
+        if mgr:
+            await mgr.broadcast({
+                "type": "activity",
+                "agent_id": agent_id,
+                "agent_name": agent_name,
+                "activity_type": activity_type.value,
+                "message": message,
+                "timestamp": now.isoformat(),
+                "project_id": project_id,
+                "project_name": project_name,
+                "duration_seconds": duration,
+            })
+
         return entry
 
     async def get_recent(

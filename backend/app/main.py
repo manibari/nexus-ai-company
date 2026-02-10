@@ -4,10 +4,11 @@ Nexus AI Company - FastAPI Application Entry Point
 
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import activity, agents, catalog, ceo, ceo_todo, control, dashboard, developer, goals, health, intake, knowledge, pipeline, pm, product, qa, sales, tasks
+from app.agents.ws_manager import ConnectionManager, set_ws_manager, get_ws_manager
 from app.db.database import create_tables
 
 
@@ -18,6 +19,10 @@ async def lifespan(app: FastAPI):
 
     # Startup
     await create_tables()
+
+    # 初始化 WebSocket Manager
+    ws_mgr = ConnectionManager()
+    set_ws_manager(ws_mgr)
 
     # 初始化 Agent Registry
     from app.db.database import AsyncSessionLocal
@@ -119,6 +124,24 @@ app.include_router(pm.router, prefix="/api/v1/pm", tags=["PM Agent"])
 app.include_router(developer.router, prefix="/api/v1/developer", tags=["Developer Agent"])
 app.include_router(qa.router, prefix="/api/v1/qa", tags=["QA Agent"])
 app.include_router(sales.router, prefix="/api/v1/sales", tags=["Sales Agent"])
+
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket 即時推播端點"""
+    mgr = get_ws_manager()
+    if mgr is None:
+        await websocket.close(code=1011)
+        return
+
+    await mgr.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # keep-alive loop
+    except WebSocketDisconnect:
+        pass
+    finally:
+        mgr.disconnect(websocket)
 
 
 @app.get("/")

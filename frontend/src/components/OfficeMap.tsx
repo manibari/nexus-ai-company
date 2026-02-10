@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useState } from 'react'
+import { useAgentWebSocket } from '../hooks/useAgentWebSocket'
 
 interface Agent {
   id: string
@@ -161,21 +162,36 @@ export default function OfficeMap({ apiUrl }: OfficeMapProps) {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null)
   const [hoveredRoom, setHoveredRoom] = useState<string | null>(null)
 
-  useEffect(() => {
-    const fetchAgents = async () => {
-      try {
-        const response = await fetch(`${apiUrl}/api/v1/agents`)
-        if (response.ok) {
-          setAgents(await response.json())
-        }
-      } catch (err) {
-        console.error('Failed to fetch agents:', err)
+  const fetchAgents = useCallback(async () => {
+    try {
+      const response = await fetch(`${apiUrl}/api/v1/agents`)
+      if (response.ok) {
+        setAgents(await response.json())
       }
+    } catch (err) {
+      console.error('Failed to fetch agents:', err)
     }
-    fetchAgents()
-    const interval = setInterval(fetchAgents, 5000)
-    return () => clearInterval(interval)
   }, [apiUrl])
+
+  // Initial fetch
+  useEffect(() => { fetchAgents() }, [fetchAgents])
+
+  // WebSocket: real-time agent status updates
+  const handleWsMessage = useCallback((data: any) => {
+    if (data.type === 'agent_status') {
+      setAgents(prev => prev.map(a =>
+        a.id === data.agent_id
+          ? { ...a, status: data.status, current_task: data.current_task, name: data.name || a.name }
+          : a
+      ))
+    }
+  }, [])
+
+  const { connected } = useAgentWebSocket({
+    apiUrl,
+    onMessage: handleWsMessage,
+    onReconnect: fetchAgents,
+  })
 
   const getAgentPosition = (agentId: string): { x: number; y: number } | null => {
     for (const room of ROOMS) {
@@ -208,6 +224,7 @@ export default function OfficeMap({ apiUrl }: OfficeMapProps) {
           <span className="text-sm font-normal text-gray-400">
             ({agents.filter(a => a.status === 'working').length}/{agents.length} working)
           </span>
+          <span className={`w-2 h-2 rounded-full ${connected ? 'bg-green-400' : 'bg-red-400'}`} title={connected ? 'Live' : 'Reconnecting...'} />
         </h2>
         <div className="flex gap-3 text-xs">
           <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-green-500" /> Working</span>

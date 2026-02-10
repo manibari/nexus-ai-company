@@ -68,6 +68,7 @@ def _get_agent_status(agent_id: str) -> AgentStatus:
 async def set_agent_working(agent_id: str, current_task: str):
     """將 Agent 狀態設為 working（供 registry.dispatch 呼叫）"""
     from app.agents.agent_state import save_agent_state
+    from app.agents.ws_manager import get_ws_manager
 
     agent = _get_agent_status(agent_id)
     agent.status = "working"
@@ -80,10 +81,21 @@ async def set_agent_working(agent_id: str, current_task: str):
         role=agent.role,
     )
 
+    mgr = get_ws_manager()
+    if mgr:
+        await mgr.broadcast({
+            "type": "agent_status",
+            "agent_id": agent_id,
+            "status": agent.status,
+            "current_task": agent.current_task,
+            "name": agent.name,
+        })
+
 
 async def set_agent_idle(agent_id: str):
     """將 Agent 狀態設回 idle（供 registry.dispatch 呼叫）"""
     from app.agents.agent_state import save_agent_state
+    from app.agents.ws_manager import get_ws_manager
 
     agent = _get_agent_status(agent_id)
     agent.status = "idle"
@@ -95,6 +107,16 @@ async def set_agent_idle(agent_id: str):
         name=agent.name,
         role=agent.role,
     )
+
+    mgr = get_ws_manager()
+    if mgr:
+        await mgr.broadcast({
+            "type": "agent_status",
+            "agent_id": agent_id,
+            "status": agent.status,
+            "current_task": None,
+            "name": agent.name,
+        })
 
 
 @router.get("/", response_model=List[AgentStatus])
@@ -191,6 +213,18 @@ async def update_agent_status(agent_id: str, update: AgentStatusUpdate):
         role=agent.role,
         blocking_info=blocking_str,
     )
+
+    # WebSocket broadcast
+    from app.agents.ws_manager import get_ws_manager
+    mgr = get_ws_manager()
+    if mgr:
+        await mgr.broadcast({
+            "type": "agent_status",
+            "agent_id": agent_id,
+            "status": agent.status,
+            "current_task": agent.current_task,
+            "name": agent.name,
+        })
 
     return agent
 
