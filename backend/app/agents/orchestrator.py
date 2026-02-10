@@ -2,12 +2,14 @@
 ORCHESTRATOR Agent（司禮監）
 
 Issue #15: 升級為 TaskOrchestrator，整合 Task Lifecycle 狀態機。
+Issue #16: Output Governance — Agent 產出 Schema Check + Rule Check。
 
 職責：
 - Execution Plan 生成（Gemini LLM）
 - Routing Governance（第一層治理：風險評估 → 自動放行 / CEO 審核）
-- 狀態機驅動：submitted → planning → plan_review / plan_approved
-- Plan 核准後 dispatch 到 Domain Agent(s)
+- Output Governance（第二層治理：Schema Check → Rule Check → 自動核准 / CEO 審核）
+- 狀態機驅動：submitted → planning → ... → draft_approved / draft_review
+- Plan 核准後 dispatch 到 Domain Agent(s)，收回結果後驅動 Output Governance
 
 保留舊有 Goal Decomposition 功能（向後相容）。
 """
@@ -681,12 +683,297 @@ auto_approve_eligible = true 當：
             from_agent="ORCHESTRATOR",
         )
 
+        # Issue #16: Output Governance — 收回 Agent 結果，驅動 Schema + Rule Check
+        if dispatch_result.get("status") != "error":
+            governance_result = await self._process_agent_result(
+                task_id=task_id,
+                agent_id=target_agent,
+                agent_result=dispatch_result,
+                plan_data=plan,
+                trace_id=trace_id,
+            )
+        else:
+            governance_result = {
+                "status": "agent_error",
+                "message": dispatch_result.get("message"),
+            }
+
         return {
             "status": "dispatched",
             "target_agent": target_agent,
             "step_order": first_step.get("order", 1),
             "dispatch_status": dispatch_result.get("status"),
+            "output_governance": governance_result,
         }
+
+    # ================================================================
+    # Issue #16: Output Governance — Agent 結果回收
+    # ================================================================
+
+    async def _process_agent_result(
+        self,
+        task_id: str,
+        agent_id: str,
+        agent_result: Dict[str, Any],
+        plan_data: Dict[str, Any],
+        trace_id: str,
+    ) -> Dict[str, Any]:
+        """
+        Agent 完成後的 Output Governance 流程：
+
+        1. reasoning → draft_generated（draft_ready）
+        2. draft_generated → schema_check（check_schema）
+        3. Schema 驗證
+           - pass → schema_check → rule_check（schema_pass）
+           - fail + retry < 3 → schema_check → reasoning（schema_fail_retry）
+           - fail + retry ≥ 3 → schema_check → escalated（schema_fail_final）
+        4. Rule Check
+           - auto_approve → rule_check → draft_approved（auto_approve_draft）
+           - needs_review → rule_check → draft_review（request_draft_review）+ CEO Todo
+        """
+        from app.core.output_governance import validate_schema, check_rules
+        from app.task.repository import get_task_repo
+        from app.agents.activity_log import ActivityType, get_activity_repo
+
+        repo = get_task_repo()
+        activity_repo = get_activity_repo()
+        task = await repo.get_task(task_id)
+        if not task:
+            return {"status": "error", "message": f"Task {task_id} not found"}
+
+        retry_count = task.get("retry_count", 0)
+
+        # 1. reasoning → draft_generated
+        await self._transition(task_id, "draft_ready", "reasoning", "draft_generated", trace_id)
+
+        # 2. draft_generated → schema_check
+        await self._transition(task_id, "check_schema", "draft_generated", "schema_check", trace_id)
+
+        # 3. Schema Check
+        schema_passed, schema_errors = validate_schema(agent_id, agent_result)
+
+        if not schema_passed:
+            await activity_repo.log(
+                agent_id="ORCHESTRATOR",
+                agent_name="司禮監",
+                activity_type=ActivityType.ERROR,
+                message=f"Schema 驗證失敗 ({agent_id}): {', '.join(schema_errors[:3])}",
+                metadata={"task_id": task_id, "errors": schema_errors, "retry_count": retry_count},
+            )
+
+            if retry_count < 2:
+                # schema_fail_retry → reasoning（retry_count + 1）
+                new_retry = retry_count + 1
+                await repo.update_lifecycle_status(task_id, "reasoning", retry_count=new_retry)
+                await repo.record_event(
+                    task_id=task_id,
+                    event_type="TRANSITION_SCHEMA_FAIL_RETRY",
+                    actor="system:output_governance",
+                    from_status="schema_check",
+                    to_status="reasoning",
+                    payload={"errors": schema_errors, "retry_count": new_retry},
+                    trace_id=trace_id,
+                )
+                return {
+                    "status": "schema_failed_retry",
+                    "errors": schema_errors,
+                    "retry_count": new_retry,
+                }
+            else:
+                # schema_fail_final → escalated
+                await self._transition(
+                    task_id, "schema_fail_final", "schema_check", "escalated", trace_id,
+                    payload={"errors": schema_errors, "retry_count": retry_count},
+                )
+                return {
+                    "status": "escalated",
+                    "reason": "schema_check_exhausted",
+                    "errors": schema_errors,
+                }
+
+        # 4. schema_pass → rule_check
+        await self._transition(task_id, "schema_pass", "schema_check", "rule_check", trace_id)
+
+        await activity_repo.log(
+            agent_id="ORCHESTRATOR",
+            agent_name="司禮監",
+            activity_type=ActivityType.MILESTONE,
+            message=f"Schema 驗證通過 ({agent_id})，進入 Rule Check",
+            metadata={"task_id": task_id, "agent_id": agent_id},
+        )
+
+        # 5. Rule Check
+        auto_approve, risk_score, reasons = check_rules(agent_id, agent_result, plan_data)
+
+        if auto_approve:
+            # auto_approve_draft → draft_approved
+            await self._transition(
+                task_id, "auto_approve_draft", "rule_check", "draft_approved", trace_id,
+                payload={"risk_score": risk_score, "reasons": reasons},
+            )
+            await activity_repo.log(
+                agent_id="ORCHESTRATOR",
+                agent_name="司禮監",
+                activity_type=ActivityType.MILESTONE,
+                message=f"Draft 自動核准（風險 {risk_score:.2f}）",
+                metadata={"task_id": task_id, "agent_id": agent_id, "risk_score": risk_score},
+            )
+            return {
+                "status": "draft_auto_approved",
+                "task_id": task_id,
+                "agent_id": agent_id,
+                "risk_score": risk_score,
+                "reasons": reasons,
+            }
+        else:
+            # request_draft_review → draft_review
+            await self._transition(
+                task_id, "request_draft_review", "rule_check", "draft_review", trace_id,
+                payload={"risk_score": risk_score, "reasons": reasons},
+            )
+
+            # 建立 CEO Draft Review Todo
+            todo = await self._create_draft_review_todo(
+                task_id=task_id,
+                agent_id=agent_id,
+                agent_result=agent_result,
+                risk_score=risk_score,
+                reasons=reasons,
+            )
+
+            # WS broadcast
+            await self._broadcast_draft_review(task_id, agent_id, risk_score, trace_id)
+
+            await activity_repo.log(
+                agent_id="ORCHESTRATOR",
+                agent_name="司禮監",
+                activity_type=ActivityType.MILESTONE,
+                message=f"Draft 需 CEO 審核（風險 {risk_score:.2f}）",
+                metadata={"task_id": task_id, "agent_id": agent_id, "risk_score": risk_score},
+            )
+
+            return {
+                "status": "draft_pending_review",
+                "task_id": task_id,
+                "agent_id": agent_id,
+                "risk_score": risk_score,
+                "reasons": reasons,
+                "todo_id": todo.id if todo else None,
+            }
+
+    async def _transition(
+        self,
+        task_id: str,
+        trigger: str,
+        from_status: str,
+        to_status: str,
+        trace_id: str,
+        payload: Optional[Dict] = None,
+    ):
+        """輔助：執行 lifecycle 轉換（更新 DB + 記錄 event）"""
+        from app.task.repository import get_task_repo
+
+        repo = get_task_repo()
+        await repo.update_lifecycle_status(task_id, to_status)
+        await repo.record_event(
+            task_id=task_id,
+            event_type=f"TRANSITION_{trigger.upper()}",
+            actor="agent:ORCHESTRATOR",
+            from_status=from_status,
+            to_status=to_status,
+            payload=payload,
+            trace_id=trace_id,
+        )
+
+    async def _create_draft_review_todo(
+        self,
+        task_id: str,
+        agent_id: str,
+        agent_result: Dict[str, Any],
+        risk_score: float,
+        reasons: List[str],
+    ):
+        """建立 CEO Draft Review 待辦"""
+        try:
+            from app.ceo.models import TodoItem, TodoAction, TodoType, TodoPriority
+            from app.api.ceo_todo import _get_repo
+
+            # 摘要 agent 結果
+            agent_status = agent_result.get("status", "unknown")
+            agent_message = agent_result.get("message", "")[:200]
+            reasons_desc = "\n".join(f"  - {r}" for r in reasons)
+
+            todo = TodoItem(
+                id="",
+                project_name="Task Lifecycle",
+                subject=f"[司禮監] Draft 待審核: {agent_id} → {agent_status}",
+                description=(
+                    f"Agent: {agent_id}\n"
+                    f"狀態: {agent_status}\n"
+                    f"風險分數: {risk_score:.2f}\n\n"
+                    f"Agent 回覆: {agent_message}\n\n"
+                    f"治理分析:\n{reasons_desc}"
+                ),
+                from_agent="ORCHESTRATOR",
+                from_agent_name="司禮監",
+                type=TodoType.APPROVAL,
+                priority=TodoPriority.HIGH if risk_score >= 0.5 else TodoPriority.NORMAL,
+                actions=[
+                    TodoAction(id="approve_draft", label="核准 Draft", style="primary"),
+                    TodoAction(
+                        id="revise_draft",
+                        label="要求修改",
+                        style="default",
+                        requires_input=True,
+                        input_placeholder="修改要求...",
+                    ),
+                    TodoAction(id="reject_draft", label="駁回", style="danger"),
+                ],
+                related_entity_type="task",
+                related_entity_id=task_id,
+                payload={
+                    "task_id": task_id,
+                    "agent_id": agent_id,
+                    "risk_score": risk_score,
+                    "agent_result_status": agent_status,
+                    "callback_trigger_approve": "approve_draft",
+                    "callback_trigger_revise": "revise_draft",
+                    "callback_trigger_reject": "reject_draft",
+                },
+            )
+
+            todo_repo = _get_repo()
+            await todo_repo.create(todo)
+            logger.info(f"Created draft review todo: {todo.id} for task {task_id}")
+            return todo
+
+        except Exception as e:
+            logger.error(f"Failed to create draft review todo: {e}")
+            return None
+
+    async def _broadcast_draft_review(
+        self,
+        task_id: str,
+        agent_id: str,
+        risk_score: float,
+        trace_id: str,
+    ):
+        """WS 通知：有新的 Draft 待審核"""
+        try:
+            from app.agents.ws_manager import get_ws_manager
+            mgr = get_ws_manager()
+            if mgr:
+                await mgr.broadcast({
+                    "type": "task_lifecycle",
+                    "task_id": task_id,
+                    "lifecycle_status": "draft_review",
+                    "agent_id": agent_id,
+                    "risk_score": risk_score,
+                    "trace_id": trace_id,
+                    "message": f"{agent_id} 產出待 CEO 審核",
+                })
+        except Exception as e:
+            logger.warning(f"WS broadcast failed: {e}")
 
     # ================================================================
     # 舊有 Goal Decomposition（向後相容）
