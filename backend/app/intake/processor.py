@@ -21,6 +21,8 @@ from app.intake.models import (
     StructuredOpportunity,
 )
 from app.intake.enricher import DataEnricher
+from app.llm.base import Message
+from app.llm.factory import LLMProviderFactory
 
 logger = logging.getLogger(__name__)
 
@@ -67,9 +69,18 @@ class IntakeProcessor:
         websocket_manager=None,
     ):
         self.db = db_session
-        self.llm = llm_provider
         self.enricher = enricher or DataEnricher()
         self.ws = websocket_manager
+
+        # Auto-acquire LLM provider if not provided
+        if llm_provider is not None:
+            self.llm = llm_provider
+        else:
+            try:
+                self.llm = LLMProviderFactory.get_with_fallback()
+            except ValueError:
+                logger.warning("No LLM provider available, falling back to keyword-based processing")
+                self.llm = None
 
         self._inputs: Dict[str, CEOInput] = {}
 
@@ -240,7 +251,10 @@ class IntakeProcessor:
 
         # 如果有 LLM，使用 LLM 進行更精確的識別
         if self.llm:
-            intent, confidence = await self._llm_identify_intent(content)
+            try:
+                return await self._llm_identify_intent(content)
+            except Exception as e:
+                logger.warning(f"LLM intent identification failed, using keyword fallback: {e}")
 
         return best_intent, confidence
 
@@ -261,8 +275,22 @@ class IntakeProcessor:
 回覆 JSON 格式：
 {{"intent": "opportunity", "confidence": 0.85, "reasoning": "..."}}
 """
-        # TODO: 呼叫 LLM
-        return InputIntent.OPPORTUNITY, 0.8
+        messages = [
+            Message(role="system", content="你是意圖分類引擎，只回傳 JSON，不要包含其他文字。"),
+            Message(role="user", content=prompt),
+        ]
+        response = await self.llm.chat(messages, temperature=0.2, max_tokens=256)
+
+        # Strip markdown code fences if present
+        text = response.content.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+
+        result = json.loads(text)
+        intent = InputIntent(result["intent"])
+        confidence = float(result["confidence"])
+        return intent, confidence
 
     async def _parse_entities(
         self,
@@ -323,10 +351,54 @@ class IntakeProcessor:
                     confidence=0.8,
                 ))
 
-        # 人名（簡單版本，實際應用需要 NER）
-        # TODO: 使用 LLM 或 NER 模型提取人名
+        # Use LLM to extract entities that regex can't catch (person names, titles, etc.)
+        if self.llm:
+            try:
+                llm_entities = await self._llm_extract_entities(content)
+                # Merge LLM entities, skipping duplicates
+                existing_values = {(e.entity_type, e.value) for e in entities}
+                for entity in llm_entities:
+                    if (entity.entity_type, entity.value) not in existing_values:
+                        entities.append(entity)
+            except Exception as e:
+                logger.warning(f"LLM entity extraction failed, using regex results only: {e}")
 
         return entities
+
+    async def _llm_extract_entities(self, content: str) -> List[ParsedEntity]:
+        """Use LLM to extract entities that regex can't catch"""
+        prompt = f"""
+從以下文字中提取實體（人名、職稱、公司、產品等）：
+
+"{content}"
+
+回覆 JSON 陣列格式：
+[{{"entity_type": "person", "value": "王經理", "confidence": 0.9}}, ...]
+
+entity_type 可以是：person, title, company, product, date, location
+只回傳 JSON 陣列，不要包含其他文字。
+"""
+        messages = [
+            Message(role="system", content="你是實體提取引擎，只回傳 JSON 陣列。"),
+            Message(role="user", content=prompt),
+        ]
+        response = await self.llm.chat(messages, temperature=0.1, max_tokens=512)
+
+        text = response.content.strip()
+        if text.startswith("```"):
+            text = re.sub(r"^```(?:json)?\s*", "", text)
+            text = re.sub(r"\s*```$", "", text)
+
+        raw_entities = json.loads(text)
+        return [
+            ParsedEntity(
+                entity_type=e["entity_type"],
+                value=e["value"],
+                confidence=float(e.get("confidence", 0.7)),
+                context=content,
+            )
+            for e in raw_entities
+        ]
 
     async def _enrich_opportunity(
         self,
@@ -394,6 +466,16 @@ class IntakeProcessor:
 
     async def _generate_summary(self, input_record: CEOInput) -> str:
         """生成處理摘要"""
+        if self.llm:
+            try:
+                return await self._llm_generate_summary(input_record)
+            except Exception as e:
+                logger.warning(f"LLM summary generation failed, using template: {e}")
+
+        return self._template_summary(input_record)
+
+    def _template_summary(self, input_record: CEOInput) -> str:
+        """Template-based fallback summary"""
         intent_names = {
             InputIntent.OPPORTUNITY: "商機線索",
             InputIntent.PROJECT: "專案需求",
@@ -413,6 +495,27 @@ class IntakeProcessor:
             summary += f"\n緊急程度：{opp.urgency}"
 
         return summary
+
+    async def _llm_generate_summary(self, input_record: CEOInput) -> str:
+        """Use LLM to generate a natural-language summary for the CEO"""
+        entities_desc = ", ".join(
+            f"{e.entity_type}={e.value}" for e in input_record.parsed_entities
+        )
+        prompt = f"""
+為以下 CEO 輸入生成一段簡潔的中文摘要（2-3 句），方便 CEO 快速回顧：
+
+原始輸入："{input_record.raw_content}"
+識別意圖：{input_record.intent.value}（信心度 {input_record.intent_confidence:.0%}）
+提取實體：{entities_desc or "無"}
+
+直接回覆摘要文字，不要加任何標記或前綴。
+"""
+        messages = [
+            Message(role="system", content="你是 CEO 助理，擅長簡潔地摘要資訊。"),
+            Message(role="user", content=prompt),
+        ]
+        response = await self.llm.chat(messages, temperature=0.3, max_tokens=256)
+        return response.content.strip()
 
     def _suggest_actions(self, input_record: CEOInput) -> List[str]:
         """建議後續動作"""
